@@ -129,8 +129,20 @@ Standard Python src-layout: `src/` is the backend package root, `web/` the front
 Two separate toolchains, one deployed container — the Dockerfile builds `web/` and
 serves the result as static files from the FastAPI process.
 
-Model: Claude via the Anthropic API. Retrieval: hybrid BM25 + embeddings — the corpus is
-tiny, a vector DB is unjustified.
+**Model: OpenAI via the `openai` SDK.** Chosen because that is where the available API
+credit is, not for any capability reason — nothing in this design depends on a particular
+provider. Keep the tool-execution logic in `agent/loop.py` separate from the API call
+itself, so the provider stays a small, isolated edit rather than a rewrite.
+
+**Retrieval: BM25 only, no embeddings.** The whole corpus is 25 chunks and roughly 1,500
+tokens. Lexical search over policy text — full of exact terms like "service credit",
+"cancellation fee", order ids — was measured to rank correctly on every case that matters,
+so embeddings and a vector store would add a dependency, a second API key and a failure
+mode while changing no answer. Revisit only if a real paraphrase query is observed to miss.
+
+Retrieval earns its place here for **access control**, not context-window pressure: the
+corpus would fit in a single prompt, but `scope.permits()` runs before scoring, so another
+account's material is never ranked, quoted or counted.
 
 ## Access control
 
