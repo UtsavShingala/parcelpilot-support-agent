@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     index_dir: Path = Path("data/index")
 
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5"
+
+    # A question needing more than this many tool round-trips is not converging;
+    # the agent escalates rather than spending more of someone else's money on it.
+    max_agent_steps: int = 12
+    max_messages_per_session: int = 25
+
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else REPO_ROOT / path
 
@@ -51,6 +59,19 @@ class Settings(BaseSettings):
     @property
     def database_path(self) -> Path:
         return self.index_path / f"{self.corpus}.db"
+
+    @property
+    def actions_path(self) -> Path:
+        """Ledger of confirmed actions.
+
+        Deliberately a separate file from the corpus database: rebuilding the corpus
+        must not erase a record of something the system actually did.
+        """
+        return self.index_path / f"{self.corpus}_actions.db"
+
+    @property
+    def has_model_credentials(self) -> bool:
+        return bool(self.openai_api_key)
 
 
 @lru_cache(maxsize=1)
