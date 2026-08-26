@@ -84,6 +84,7 @@ export type AgentEvent =
       arguments: Record<string, unknown>;
       step: number;
       mutating: boolean;
+      call_id: string;
     }
   | {
       type: "tool_result";
@@ -93,6 +94,7 @@ export type AgentEvent =
       summary: string;
       error: string | null;
       mutating: boolean;
+      call_id: string;
       result?: ToolResultPayload;
     }
   | { type: "text_delta"; text: string; final: boolean }
@@ -103,6 +105,9 @@ export type AgentEvent =
 
 // One tool call, assembled from its start and result events.
 export interface ToolCall {
+  /** Identifies this call. A step is shared by every call in one model reply, so
+      matching a result on step alone updates the wrong card. */
+  callId: string;
   step: number;
   name: string;
   arguments: Record<string, unknown>;

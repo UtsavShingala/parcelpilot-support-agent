@@ -81,6 +81,7 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
             client=client,
             snapshot_at=data.snapshot_at,
             max_steps=settings.max_agent_steps,
+            max_seconds=settings.max_turn_seconds,
         ),
         personas=open_personas(settings),
         sessions=SessionStore(max_messages=settings.max_messages_per_session),

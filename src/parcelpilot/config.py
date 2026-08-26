@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     # at some point while the others answered fine.
     model_fallbacks: str = "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash"
 
+    # A ceiling on the whole turn, not on one request. Per-request timeouts multiply:
+    # models tried x retries x timeout x steps, which reached the better part of an
+    # hour with defaults that each looked reasonable alone. Past this the turn hands
+    # over to a person rather than leaving a visitor on an open stream.
+    max_turn_seconds: float = 150.0
+
     # How long one model request may take before the next model is tried instead.
     #
     # Tuned against measurement, not intuition: healthy Flash models answered in five

@@ -62,6 +62,7 @@ export function ChatWindow({
   error,
   onAsk,
   onSignOut,
+  onStop,
 }: {
   session: SessionInfo;
   turns: Turn[];
@@ -69,6 +70,7 @@ export function ChatWindow({
   error: string | null;
   onAsk: (question: string) => void;
   onSignOut: () => void;
+  onStop: () => void;
 }) {
   // Staff get a second view. Customers never see the tab, and the endpoint behind
   // it refuses them anyway -- the tab is convenience, the refusal is the control.
@@ -210,7 +212,7 @@ export function ChatWindow({
                 >
                   <div className="panel__stack">
                     {turn.tools.map((call) => (
-                      <ToolCallCard call={call} key={`${call.step}-${call.name}`} />
+                      <ToolCallCard call={call} key={call.callId || `${call.step}-${call.name}`} />
                     ))}
                   </div>
                 </AsidePanel>
@@ -260,13 +262,15 @@ export function ChatWindow({
           ref={input}
           rows={2}
         />
-        <button
-          className="button button--primary"
-          disabled={busy || exhausted}
-          type="submit"
-        >
-          Ask
-        </button>
+        {busy ? (
+          <button className="button" onClick={onStop} type="button">
+            Stop
+          </button>
+        ) : (
+          <button className="button button--primary" disabled={exhausted} type="submit">
+            Ask
+          </button>
+        )}
       </form>
       )}
     </div>

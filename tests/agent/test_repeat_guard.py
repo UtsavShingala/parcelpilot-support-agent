@@ -11,12 +11,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from time import sleep
 from typing import Any
 
 from parcelpilot.agent.loop import SupportAgent, collect
 from parcelpilot.agent.model import Message, ModelReply, ToolCall
 from parcelpilot.agent.registry import ToolRegistry
-from parcelpilot.agent.tools.base import Tool, object_schema, string_field
+from parcelpilot.agent.tools.base import Tool, ToolError, object_schema, string_field
 from parcelpilot.auth.context import CallerContext, Role
 
 CALLER = CallerContext(role=Role.SUPPORT_AGENT, display_name="Maya")
@@ -44,6 +45,8 @@ class _CountingRegistry:
 
     def _handler(self, caller: CallerContext, **arguments: Any) -> dict[str, Any]:
         self.runs += 1
+        if not arguments.get("order_id"):
+            raise ToolError("an order id is required")
         return {"result_count": 1, "orders": [{"order_id": arguments["order_id"]}]}
 
     def __getattr__(self, item: str) -> Any:
@@ -226,3 +229,94 @@ def test_one_tool_cannot_be_leaned_on_forever() -> None:
         if event.type == "tool_result" and "already used" in event.summary
     ]
     assert len(refusals) == 3
+
+
+def test_a_failing_call_is_also_deduped() -> None:
+    """The shape most likely to loop was the one neither guard engaged on.
+
+    Attempts were recorded only on success, so a call that errored could be
+    reissued verbatim every step until the ceiling -- each one a full model round
+    trip.
+    """
+    registry = _CountingRegistry()
+
+    class Failing:
+        def __init__(self) -> None:
+            self.step = 0
+
+        def reply(self, *, messages: Sequence[Message], tools: Sequence[dict[str, Any]]):
+            self.step += 1
+            if self.step <= 5:
+                return ModelReply(
+                    tool_calls=(
+                        # No order_id: the tool raises, so the result is never ok.
+                        ToolCall(call_id=f"c{self.step}", name="lookup_orders", arguments={}),
+                    )
+                )
+            return ModelReply(text="done")
+
+    turn = _run(Failing(), registry)
+    results = [e for e in turn.events if e.type == "tool_result"]
+
+    assert turn.answer == "done"
+    assert sum(1 for e in results if not e.ok) == 1, "the same failure ran more than once"
+    assert sum(1 for e in results if "already run at step" in e.summary) == 4
+
+
+class _SlowClient:
+    """Spends longer per round trip than the turn is allowed in total."""
+
+    def __init__(self, seconds: float = 0.05) -> None:
+        self.seconds = seconds
+        self.calls = 0
+
+    def reply(self, *, messages: Sequence[Message], tools: Sequence[dict[str, Any]]):
+        self.calls += 1
+        sleep(self.seconds)
+        return ModelReply(
+            tool_calls=(
+                ToolCall(
+                    call_id=f"c{self.calls}",
+                    name="lookup_orders",
+                    arguments={"order_id": f"ORD-{self.calls}"},
+                ),
+            )
+        )
+
+
+def test_a_turn_that_runs_out_of_time_hands_over() -> None:
+    """The step ceiling bounds round trips, not the clock a visitor waits on.
+
+    A degraded provider makes each step slow rather than more numerous, so without
+    a deadline the wait is retries x fallbacks x timeout x remaining steps.
+    """
+    registry = _CountingRegistry()
+    client = _SlowClient(seconds=0.05)
+    agent = SupportAgent(
+        registry=registry,
+        client=client,
+        snapshot_at=SNAPSHOT,
+        max_steps=50,
+        max_seconds=0.02,
+    )
+    turn = collect(agent.run(CALLER, "why was my pickup missed?"))
+
+    assert turn.escalated
+    assert "handover" in turn.answer
+    assert client.calls < 50, "the step ceiling was reached instead of the deadline"
+
+    # This registry has no prepare_escalation, so there is no draft to confirm --
+    # the handover still has to say what was being asked and what was tried.
+    handover = next(event for event in turn.events if event.type == "escalation")
+    assert "ran out of time" in handover.reason
+    assert "why was my pickup missed?" in handover.detail
+    assert "Already looked at" in handover.detail
+
+
+def test_the_deadline_does_not_cut_short_a_turn_that_finishes() -> None:
+    """It is a backstop, not a budget every answer has to race."""
+    registry = _CountingRegistry()
+    turn = _run(_RepeatingClient(times=1), registry)
+
+    assert not turn.escalated
+    assert turn.answer == "done"

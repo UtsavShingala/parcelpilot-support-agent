@@ -27,6 +27,10 @@ class ToolStarted:
     arguments: dict[str, Any]
     step: int
     mutating: bool = False
+    call_id: str = ""
+    """Identifies this call. One reply may contain several calls sharing a step, so
+    a step number alone cannot tell two of them apart -- an interface matching on it
+    shows the first result twice and never shows the second."""
     type: str = field(default="tool_start", init=False)
 
 
@@ -48,6 +52,8 @@ class ToolFinished:
     error: str | None = None
     mutating: bool = False
     payload: Any = None
+    call_id: str = ""
+    """Matches this result to its :class:`ToolStarted`."""
     type: str = field(default="tool_result", init=False)
 
 

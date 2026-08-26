@@ -73,6 +73,7 @@ def build_session(settings: Settings, client: ModelClient | None = None) -> Sess
             client=model,
             snapshot_at=data.snapshot_at,
             max_steps=settings.max_agent_steps,
+            max_seconds=settings.max_turn_seconds,
         ),
         ledger=ActionLedger(settings.actions_path, effective_at=data.snapshot_at),
         personas=open_personas(settings),

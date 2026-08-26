@@ -21,6 +21,7 @@ import json
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 from typing import Any
 
 from parcelpilot.agent.events import (
@@ -40,6 +41,7 @@ from parcelpilot.agent.tools.actions import ActionDraft, ActionKind
 from parcelpilot.auth.context import CallerContext
 
 CEILING_REASON = "the assistant could not resolve this within its step limit"
+OUT_OF_TIME = "the assistant ran out of time before reaching an answer"
 
 PREPARE_TOOLS = {"prepare_escalation", "prepare_ticket_update", "prepare_follow_up"}
 
@@ -74,11 +76,15 @@ class SupportAgent:
         client: ModelClient,
         snapshot_at: datetime,
         max_steps: int = 12,
+        max_seconds: float = 150.0,
     ) -> None:
         self._registry = registry
         self._client = client
         self._snapshot_at = snapshot_at
         self._max_steps = max(1, max_steps)
+        # Floored just above zero rather than at a comfortable minimum: a caller
+        # asking for a tiny budget means it, and clamping upward hides that.
+        self._max_seconds = max(0.001, max_seconds)
 
     def run(
         self,
@@ -103,7 +109,18 @@ class SupportAgent:
         # What was tried, in order, so a handover can say what ground was covered.
         attempted: list[str] = []
 
+        deadline = monotonic() + self._max_seconds
+
         for step in range(1, self._max_steps + 1):
+            if monotonic() >= deadline:
+                # The step ceiling bounds round trips, not time. A degraded provider
+                # makes each one slow rather than more numerous, so without a clock
+                # a visitor waits on an open stream for as long as every retry and
+                # fallback takes, multiplied by every remaining step.
+                yield from self._escalate_at_ceiling(
+                    caller, question, attempted, reason=OUT_OF_TIME
+                )
+                return
             try:
                 reply = self._client.reply(messages=messages, tools=tools)
             except ModelUnavailable as error:
@@ -154,7 +171,13 @@ class SupportAgent:
         tool = self._registry.get(call.name)
         mutating = bool(tool and tool.mutating)
         events: list[AgentEvent] = [
-            ToolStarted(name=call.name, arguments=call.arguments, step=step, mutating=mutating)
+            ToolStarted(
+                name=call.name,
+                arguments=call.arguments,
+                step=step,
+                mutating=mutating,
+                call_id=call.call_id,
+            )
         ]
 
         spent = used.get(call.name, 0)
@@ -173,6 +196,7 @@ class SupportAgent:
                     step=step,
                     summary=f"{call.name} already used {spent} times this turn",
                     mutating=mutating,
+                    call_id=call.call_id,
                 )
             )
             return events, result
@@ -199,6 +223,7 @@ class SupportAgent:
                     summary=f"already run at step {first_seen}; reusing that result",
                     mutating=mutating,
                     payload=None,
+                    call_id=call.call_id,
                 )
             )
             return events, result
@@ -223,12 +248,15 @@ class SupportAgent:
                 error=result.error,
                 mutating=result.mutating or mutating,
                 payload=result.payload if result.ok else None,
+                call_id=call.call_id,
             )
         )
 
-        if result.ok:
-            completed[signature] = step
-            used[call.name] = spent + 1
+        # Recorded whether or not it succeeded. A call that errors is the shape most
+        # likely to be retried verbatim, and leaving failures unrecorded meant the
+        # two guards against going in circles did not engage on it.
+        completed[signature] = step
+        used[call.name] = spent + 1
 
         if result.ok and call.name in PREPARE_TOOLS:
             draft = ActionDraft.from_dict(result.payload)
@@ -247,7 +275,12 @@ class SupportAgent:
     # -- giving up --------------------------------------------------------------
 
     def _escalate_at_ceiling(
-        self, caller: CallerContext, question: str, attempted: Sequence[str]
+        self,
+        caller: CallerContext,
+        question: str,
+        attempted: Sequence[str],
+        *,
+        reason: str = CEILING_REASON,
     ) -> Iterator[AgentEvent]:
         """Hand over rather than retry. Retrying would buy a worse version of this.
 
@@ -269,7 +302,7 @@ class SupportAgent:
             draft = ActionDraft.from_dict(result.payload)
             yield ActionDrafted(draft=draft)
 
-        yield Escalated(reason=CEILING_REASON, detail=detail, draft=draft)
+        yield Escalated(reason=reason, detail=detail, draft=draft)
         answer = (
             "I could not work this out from the documents available to me, so I have "
             "prepared a handover to a support agent. Confirm it and someone will pick "

@@ -1,6 +1,6 @@
 // Wiring: roster, session, and the reducer that turns a stream of events into a turn.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, askQuestion, fetchRoster, fetchSession, signIn, signOut } from "./api";
 import { ChatWindow } from "./components/ChatWindow";
 import { PersonaPicker } from "./components/PersonaPicker";
@@ -32,6 +32,7 @@ function applyEvent(turn: Turn, event: AgentEvent): Turn {
         tools: [
           ...turn.tools,
           {
+            callId: event.call_id,
             step: event.step,
             name: event.name,
             arguments: event.arguments,
@@ -43,7 +44,10 @@ function applyEvent(turn: Turn, event: AgentEvent): Turn {
 
     case "tool_result": {
       const tools = turn.tools.map((call) =>
-        call.step === event.step && call.name === event.name && call.status === "running"
+        // Matched on the call id, not the step: one model reply can contain several
+        // calls sharing a step, and matching on step gave both cards the first
+        // result and never showed the second.
+        call.callId === event.call_id
           ? {
               ...call,
               status: event.ok ? ("ok" as const) : ("error" as const),
@@ -97,6 +101,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Lets a turn be abandoned. A degraded provider can keep the server working for
+  // longer than anyone will wait, and without this the page had no way out of a
+  // slow answer short of a reload.
+  const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => {
     Promise.all([fetchRoster(), fetchSession()])
@@ -127,7 +135,15 @@ export default function App() {
     setTurns([]);
   }, []);
 
+  const stop = useCallback(() => {
+    inFlight.current?.abort();
+  }, []);
+
   const ask = useCallback(async (question: string) => {
+    inFlight.current?.abort(); // never run two turns against one session
+    const controller = new AbortController();
+    inFlight.current = controller;
+
     setBusy(true);
     setError(null);
     setTurns((previous) => [...previous, blankTurn(question)]);
@@ -140,12 +156,25 @@ export default function App() {
       });
 
     try {
-      await askQuestion(question, update);
+      await askQuestion(question, update, controller.signal);
       setSession(await fetchSession());
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : String(cause));
+      if (controller.signal.aborted) {
+        update({ type: "failed", message: "Stopped." });
+        return;
+      }
+      const message = cause instanceof ApiError ? cause.message : String(cause);
+      setError(message);
+
+      // Resolve the turn as well as showing the banner. A request that fails
+      // *before* the stream opens -- an exhausted allowance, a 500, a dropped
+      // connection -- never delivers a `failed` event, so the turn kept
+      // `done: false` and rendered "Working…" for the rest of the session.
+      update({ type: "failed", message });
+
       if (cause instanceof ApiError && cause.status === 401) setSession(null);
     } finally {
+      if (inFlight.current === controller) inFlight.current = null;
       setBusy(false);
     }
   }, []);
@@ -168,11 +197,12 @@ export default function App() {
         error={error}
         onAsk={ask}
         onSignOut={leave}
+        onStop={stop}
         session={session}
         turns={turns}
       />
     );
-  }, [ask, busy, choose, error, leave, loading, roster, session, turns]);
+  }, [ask, busy, choose, error, leave, loading, roster, session, stop, turns]);
 
   return <main className="app">{body}</main>;
 }
