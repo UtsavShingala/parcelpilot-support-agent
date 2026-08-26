@@ -221,17 +221,19 @@ def command_compare(
 def command_models(settings: Settings) -> int:
     """List the models this key can reach, so the configured id is never a guess."""
     try:
-        models = available_models(api_key=settings.openai_api_key)
+        models = available_models(
+            api_key=settings.model_api_key, base_url=settings.model_base_url
+        )
     except ModelUnavailable as error:
         print(f"\nCannot list models: {error}")
         return 2
 
     print(f"\n{len(models)} model(s) available to this key, newest first:\n")
     for model_id in models:
-        marker = "   <- configured in .env" if model_id == settings.openai_model else ""
+        marker = "   <- configured in .env" if model_id == settings.model_name else ""
         print(f"  {model_id}{marker}")
 
-    if settings.openai_model not in models:
+    if settings.model_name not in models:
         print(
             f"\nWARNING: OPENAI_MODEL is {settings.openai_model!r}, which is not in this "
             "list. Every request will fail until .env is changed."

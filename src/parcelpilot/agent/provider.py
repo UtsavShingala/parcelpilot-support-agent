@@ -12,12 +12,12 @@ failure this system should never have.
 
 from __future__ import annotations
 
-from parcelpilot.agent.model import ModelClient, OpenAIModelClient
+from parcelpilot.agent.model import CompatibleModelClient, ModelClient
 from parcelpilot.agent.scripted import ScriptedModelClient
 from parcelpilot.config import Settings, get_settings
 
 SCRIPTED_MODE = "scripted"
-LIVE_MODE = "openai"
+LIVE_MODE = "live"
 
 
 def build_model_client(settings: Settings | None = None) -> ModelClient:
@@ -29,7 +29,11 @@ def build_model_client(settings: Settings | None = None) -> ModelClient:
     settings = settings or get_settings()
     if settings.scripted:
         return ScriptedModelClient()
-    return OpenAIModelClient(api_key=settings.openai_api_key, model=settings.openai_model)
+    return CompatibleModelClient(
+        api_key=settings.model_api_key,
+        model=settings.model_name,
+        base_url=settings.model_base_url,
+    )
 
 
 def mode_of(client: ModelClient) -> str:
@@ -42,7 +46,7 @@ def describe_mode(settings: Settings | None = None) -> str:
     settings = settings or get_settings()
     if settings.scripted:
         return "scripted (deterministic; no model is called)"
-    return f"{LIVE_MODE} ({settings.openai_model})"
+    return f"{LIVE_MODE} ({settings.model_name})"
 
 
 __all__ = ["LIVE_MODE", "SCRIPTED_MODE", "build_model_client", "describe_mode", "mode_of"]

@@ -41,11 +41,20 @@ layer handed them different material, not because the model was told to pretend.
 ## Run it with a key
 
 ```bash
-cp .env.example .env        # then paste OPENAI_API_KEY
+cp .env.example .env        # then paste MODEL_API_KEY
 python -m parcelpilot.cli models     # lists what the key can actually reach
 ```
 
-Set `OPENAI_MODEL` to the cheapest model in that list that supports tool calling.
+Defaults to **Gemini** through its OpenAI-compatible endpoint, which has a free
+tier. Any provider speaking the same protocol works -- OpenAI, OpenRouter, Together
+-- by changing `MODEL_BASE_URL` and `MODEL_NAME`; for OpenAI itself, leave the base
+URL empty.
+
+This is not a hypothetical: the project moved from OpenAI to Gemini mid-build when
+the credit ran out, and it cost two settings and one provider quirk. Nothing above
+[`agent/model.py`](src/parcelpilot/agent/model.py) changed.
+
+Set `MODEL_NAME` to the cheapest model in that list that supports tool calling.
 Every loop step resends the conversation, so model choice dominates cost far more
 than provider choice does.
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,8 +51,25 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     index_dir: Path = Path("data/index")
 
-    openai_api_key: str = ""
-    openai_model: str = "gpt-5"
+    # The model provider, named for the protocol rather than the vendor. Several
+    # providers speak the OpenAI chat-completions API -- OpenAI, Gemini through its
+    # compatibility endpoint, OpenRouter, Together -- so pointing at a different one
+    # is a base URL and a model name, not a rewrite. The OPENAI_* spellings are
+    # accepted as aliases so an existing .env keeps working.
+    model_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "MODEL_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"
+        ),
+    )
+    model_name: str = Field(
+        default="gemini-3.7-flash",
+        validation_alias=AliasChoices("MODEL_NAME", "OPENAI_MODEL", "GEMINI_MODEL"),
+    )
+    model_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta/openai/",
+        validation_alias=AliasChoices("MODEL_BASE_URL", "OPENAI_BASE_URL"),
+    )
 
     # Run the deterministic client instead of calling a provider. A real mode, not a
     # test switch: it lets the whole pipeline be demonstrated and deployed with no
@@ -105,7 +123,7 @@ class Settings(BaseSettings):
 
     @property
     def has_model_credentials(self) -> bool:
-        return bool(self.openai_api_key)
+        return bool(self.model_api_key)
 
 
 @lru_cache(maxsize=1)
