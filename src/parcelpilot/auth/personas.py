@@ -36,18 +36,34 @@ class Persona:
     label: str
     description: str
     context: CallerContext
+    public_description: str = ""
 
     @property
     def role(self) -> Role:
         return self.context.role
 
     def to_dict(self) -> dict[str, str]:
+        """The full record, for server-side use and the CLI."""
         return {
             "persona_id": self.persona_id,
             "label": self.label,
             "description": self.description,
             "role": self.context.role.value,
             "account_id": self.context.account_id or "",
+        }
+
+    def to_public_dict(self) -> dict[str, str]:
+        """What a browser is allowed to know.
+
+        Role and account id are deliberately absent. The browser picks an identity
+        by ``persona_id`` once; from then on its only credential is an opaque
+        session id, and the authority behind it is resolved server-side. Nothing
+        here is ever read back as an authorisation claim.
+        """
+        return {
+            "persona_id": self.persona_id,
+            "label": self.label,
+            "description": self.public_description or self.description,
         }
 
 
@@ -77,6 +93,7 @@ def _customer_personas(connection: sqlite3.Connection) -> list[Persona]:
             persona_id=str(row["account_id"]).lower(),
             label=str(row["account_name"]),
             description=f"{row['plan']} plan customer, account {row['account_id']}",
+            public_description=f"{row['plan']} plan customer",
             context=CallerContext(
                 role=Role.CUSTOMER,
                 account_id=str(row["account_id"]),
