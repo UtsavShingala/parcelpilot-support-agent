@@ -47,7 +47,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.runtime.close()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, static_dir: Path | None = None
+) -> FastAPI:
+    """Build the application.
+
+    ``static_dir`` overrides where the built interface is looked for. It defaults to
+    discovery, which is what a deployment wants; passing it explicitly is how a test
+    serves a known bundle instead of whatever this machine happens to have built.
+    """
     app = FastAPI(
         title="ParcelPilot Support Agent",
         version="0.1.0",
@@ -71,11 +79,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "sessions": len(runtime.sessions),
         }
 
-    root = static_root()
-    if root is not None:
+    root = static_dir if static_dir is not None else static_root()
+    if root is not None and (root / "index.html").is_file():
         app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
-        @app.get("/{path:path}")
+        # response_model=None: the return type is a union of responses, which FastAPI
+        # would otherwise try to build a Pydantic response model from and reject.
+        @app.get("/{path:path}", response_model=None)
         def spa(path: str) -> FileResponse | JSONResponse:
             """Serve a real file if it exists, otherwise the app shell.
 
