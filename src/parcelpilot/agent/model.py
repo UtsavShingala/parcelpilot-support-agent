@@ -27,9 +27,12 @@ Role = Literal["system", "user", "assistant", "tool"]
 # slowly, and retrying sends the same oversized prompt that was too slow the first
 # time -- every attempt costs the full timeout before it gives up.
 #
-# Three attempts covers the bursty case without letting a slow one hang the page for
-# the better part of ten minutes.
-MAX_RETRIES = 3
+# With a fallback list in place, retrying the same model is nearly redundant: the
+# next name is a better answer to "this one is unwell" than another attempt at the
+# one that just failed. One retry absorbs a genuine blip; past that the list takes
+# over. Attempts multiply -- models x retries x timeout is the worst-case wait a
+# visitor sits through -- so both numbers stay small.
+MAX_RETRIES = 1
 
 
 @dataclass(frozen=True)

@@ -156,7 +156,7 @@ def build_registry(store: DocumentStore, data: OperationalData) -> ToolRegistry:
     tools: Sequence[Tool] = [
         build_search_documents(store),
         *build_operational_tools(data),
-        build_calculate(data),
+        build_calculate(data, store),
         *build_action_tools(data),
     ]
     return ToolRegistry(tuple(tools))

@@ -22,6 +22,7 @@ from parcelpilot.agent.calculate import (
     service_credit_amount,
     sla_status,
 )
+from parcelpilot.agent.grounding import NotGrounded, resolve
 from parcelpilot.agent.tools.base import (
     ALL_ROLES,
     Tool,
@@ -33,6 +34,7 @@ from parcelpilot.agent.tools.base import (
 )
 from parcelpilot.auth.context import CallerContext
 from parcelpilot.data.queries import OperationalData
+from parcelpilot.retrieval.store import DocumentStore
 
 OPERATIONS = ("cancellation_timing", "pickup_delay", "service_credit", "sla_status")
 
@@ -61,11 +63,18 @@ Operations:
 """
 
 
-def build_calculate(data: OperationalData) -> Tool:
+def build_calculate(data: OperationalData, store: DocumentStore) -> Tool:
+    """The calculator, with every policy figure bound to a document.
+
+    ``store`` is here so a figure can be checked against the passage the model says
+    it read it in, through the caller's own scope.
+    """
+
     def calculate(
         caller: CallerContext,
         *,
         operation: str,
+        sources: list[str] | None = None,
         order_id: str | None = None,
         ticket_id: str | None = None,
         free_window_minutes: float | None = None,
@@ -80,6 +89,30 @@ def build_calculate(data: OperationalData) -> Tool:
         credits_already_issued_inr: float = 0.0,
         approval_threshold_inr: float | None = None,
     ) -> dict[str, Any]:
+        figures = {
+            "free_window_minutes": free_window_minutes,
+            "threshold_hours": threshold_hours,
+            "target_minutes": target_minutes,
+            "flat_amount_inr": flat_amount_inr,
+            "percentage_of_fee": percentage_of_fee,
+            "maximum_inr": maximum_inr,
+            "monthly_cap_inr": monthly_cap_inr,
+            "approval_threshold_inr": approval_threshold_inr,
+        }
+        supplied = {name: value for name, value in figures.items() if value is not None}
+
+        # Only figures that were actually passed need grounding. Asking for sources
+        # when the call is missing its arguments entirely would answer a different
+        # question than the one the caller got wrong, and "you did not cite a source"
+        # is unhelpful when the real problem is a missing threshold.
+        grounding = None
+        if supplied:
+            try:
+                grounding = resolve(store, caller.account_scope(), list(sources or []))
+                grounding.require(**supplied)
+            except NotGrounded as error:
+                raise ToolError(str(error)) from error
+
         try:
             if operation == "cancellation_timing":
                 _require(order_id=order_id, free_window_minutes=free_window_minutes)
@@ -123,7 +156,8 @@ def build_calculate(data: OperationalData) -> Tool:
         except CalculationError as error:
             raise ToolError(str(error)) from error
 
-        return {"operation": operation, **result}
+        cited = list(grounding.citations) if grounding else []
+        return {"operation": operation, "grounded_in": cited, **result}
 
     return Tool(
         name="calculate",
@@ -131,6 +165,16 @@ def build_calculate(data: OperationalData) -> Tool:
         parameters=object_schema(
             {
                 "operation": string_field("Which calculation to run.", enum=list(OPERATIONS)),
+                "sources": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Citations of the passages every figure below was read from, "
+                        "exactly as search_documents returned them. Each figure is "
+                        "checked against these passages and the calculation is refused "
+                        "if it does not appear -- so search first, then quote."
+                    ),
+                },
                 "order_id": string_field("Order id, for cancellation_timing and pickup_delay."),
                 "ticket_id": string_field("Ticket id, for sla_status."),
                 "free_window_minutes": number_field(

@@ -196,6 +196,11 @@ def test_a_multi_step_question_chains_lookup_into_calculation(
                     "operation": "cancellation_timing",
                     "order_id": "ORD-1001",
                     "free_window_minutes": 30,
+                    # The window has to be attributed to the passage it was read in;
+                    # the calculator refuses a figure it cannot find there.
+                    "sources": [
+                        "ParcelPilot Cancellation & Service Credit SOP v4 - 1. Order cancellation"
+                    ],
                 },
             ),
         ],
@@ -206,3 +211,12 @@ def test_a_multi_step_question_chains_lookup_into_calculation(
     assert all(
         event.ok for event in turn.events if getattr(event, "type", "") == "tool_result"
     )
+
+    calculation = next(
+        event
+        for event in turn.events
+        if getattr(event, "type", "") == "tool_result" and event.name == "calculate"
+    )
+    assert calculation.payload["grounded_in"] == [
+        "ParcelPilot Cancellation & Service Credit SOP v4 - 1. Order cancellation"
+    ]

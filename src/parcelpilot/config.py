@@ -70,13 +70,17 @@ class Settings(BaseSettings):
     # are per-model conditions, so a second name is the cheapest available recovery
     # -- and over one afternoon three different Gemini models each went unavailable
     # at some point while the others answered fine.
-    model_fallbacks: str = "gemini-3.6-flash,gemini-3.5-flash,gemini-3.7-flash"
+    model_fallbacks: str = "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash"
 
-    # How long one model request may take. An ops question can run six tool calls,
-    # and each request carries the whole conversation so far -- the last one is the
-    # slowest and the most expensive to lose. Sixty seconds cut those off after the
-    # work was already done.
-    model_timeout_seconds: float = 120.0
+    # How long one model request may take before the next model is tried instead.
+    #
+    # Tuned against measurement, not intuition: healthy Flash models answered in five
+    # to twelve seconds, while a degraded one sat past twenty-five on a trivial
+    # prompt. A long timeout does not rescue that -- it just makes every visitor wait
+    # out a model that is not going to answer, multiplied by every name in the
+    # fallback list. Forty-five seconds is generous for a real turn and quick to give
+    # up on one that has stopped responding.
+    model_timeout_seconds: float = 45.0
 
     model_base_url: str = Field(
         default="https://generativelanguage.googleapis.com/v1beta/openai/",
