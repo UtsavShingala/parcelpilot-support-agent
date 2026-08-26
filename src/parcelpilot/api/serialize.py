@@ -40,7 +40,19 @@ def event_to_dict(event: AgentEvent) -> dict[str, Any]:
     """Render one event as the object the browser receives."""
     payload: dict[str, Any] = {"type": event.type}
 
-    for name in ("name", "step", "ok", "summary", "error", "mutating", "text", "final"):
+    for name in (
+        "name",
+        "step",
+        "ok",
+        "summary",
+        "error",
+        "mutating",
+        "text",
+        "final",
+        # Without this a browser cannot tell two calls in one reply apart: they share
+        # a step, so matching on step alone gives both cards the first result.
+        "call_id",
+    ):
         if hasattr(event, name):
             payload[name] = getattr(event, name)
 

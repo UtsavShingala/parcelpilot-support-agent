@@ -115,3 +115,23 @@ def test_an_oversized_question_is_rejected(client: TestClient) -> None:
     sign_in(client, "acct-001")
     response = client.post("/api/chat", json={"question": "x" * 5000})
     assert response.status_code == 422
+
+
+def test_each_tool_call_is_identifiable_on_the_wire(client: TestClient) -> None:
+    """One model reply can contain several calls sharing a step.
+
+    Without a per-call id the interface matched results on step alone, so both
+    cards took the first result and the second call was never shown.
+    """
+    sign_in(client, "acct-001")
+    events = ask(client, CANCELLATION)
+
+    starts = [event for event in events if event["type"] == "tool_start"]
+    results = [event for event in events if event["type"] == "tool_result"]
+
+    assert starts, "no tool calls to check"
+    assert all(event["call_id"] for event in starts), "a call arrived without an id"
+    assert len({event["call_id"] for event in starts}) == len(starts), "ids collide"
+    assert {event["call_id"] for event in results} == {
+        event["call_id"] for event in starts
+    }, "a result could not be matched to its call"
