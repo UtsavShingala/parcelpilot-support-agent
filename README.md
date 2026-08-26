@@ -108,9 +108,16 @@ src/parcelpilot/
   auth/       CallerContext and the persona roster, read from the data
   data/       account-scoped queries, scoping in the SQL predicate
   agent/      tools, registry, loop, prompts, scripted mode
-  api/        sessions, SSE chat, action confirmation
+  insights/   proactive detection for the operations view
+  api/        sessions, SSE chat, action confirmation, insights
 web/          the chat interface
 ```
 
-Design decisions and their reasoning are in [`ARCHITECTURE.md`](ARCHITECTURE.md);
-product choices in [`PRODUCT.md`](PRODUCT.md).
+## Documents
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) - how it is built and why each structural
+  choice was made that way.
+- [`PRODUCT.md`](PRODUCT.md) - who it serves, the bonus problem chosen, the one
+  metric it should be judged by, and what was deliberately left out.
+- [`AI_TOOLS.md`](AI_TOOLS.md) - which AI tools built this, and where they were
+  wrong.
