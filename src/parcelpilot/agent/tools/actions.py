@@ -85,6 +85,23 @@ class ActionDraft:
             "status": "awaiting confirmation",
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> ActionDraft:
+        """Rebuild a draft from a tool payload.
+
+        Tool payloads stay plain JSON so they serialise cleanly for the model; the
+        loop reconstructs the draft from one to hand back for confirmation. What
+        comes back is never trusted -- :meth:`ActionLedger.confirm` re-authorises it.
+        """
+        return cls(
+            draft_id=payload["draft_id"],
+            kind=ActionKind(payload["kind"]),
+            summary=payload["summary"],
+            details=dict(payload.get("details") or {}),
+            account_id=payload.get("account_id"),
+            prepared_for=payload.get("prepared_for", ""),
+        )
+
 
 @dataclass(frozen=True)
 class ActionRecord:
