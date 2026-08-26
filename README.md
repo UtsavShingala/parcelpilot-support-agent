@@ -9,6 +9,8 @@ ranks by **authority** before similarity, access control enforced in the **query
 layer** rather than the prompt, and state-changing actions that a model can prepare
 but only a person can perform.
 
+**Live:** https://parcelpilot.utsavshingala.com
+
 ## Run it without an API key
 
 Everything except the model's own judgement runs with no credentials at all.
