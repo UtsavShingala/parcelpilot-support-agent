@@ -154,6 +154,7 @@ class SupportAgent:
                 summary=_summarise(result),
                 error=result.error,
                 mutating=result.mutating or mutating,
+                payload=result.payload if result.ok else None,
             )
         )
 

@@ -32,7 +32,14 @@ class ToolStarted:
 
 @dataclass(frozen=True)
 class ToolFinished:
-    """A tool call returned."""
+    """A tool call returned.
+
+    ``payload`` is what the tool actually produced, carried alongside the one-line
+    summary because an interface needs more than prose: a search result has to
+    become citation cards showing the file, version, clause and authority tier that
+    an answer rests on. Reconstructing that from a summary string is not possible,
+    and asking the tools twice would be a second, divergent read of the corpus.
+    """
 
     name: str
     ok: bool
@@ -40,6 +47,7 @@ class ToolFinished:
     summary: str
     error: str | None = None
     mutating: bool = False
+    payload: Any = None
     type: str = field(default="tool_result", init=False)
 
 

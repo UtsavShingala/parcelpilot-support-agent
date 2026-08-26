@@ -109,6 +109,8 @@ def _render(hit: RetrievedChunk) -> dict[str, Any]:
     return {
         "citation": chunk.citation,
         "source_file": chunk.source_file,
+        "version": chunk.authority.version,
+        "clause": chunk.heading,
         "authority_tier": chunk.tier.name,
         "applies_to": chunk.scope,
         "status": chunk.authority.status,
