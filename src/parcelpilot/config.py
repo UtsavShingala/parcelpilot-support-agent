@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     max_agent_steps: int = 12
     max_messages_per_session: int = 25
 
+    # Mark the session cookie Secure. Off by default because it would break a plain
+    # HTTP run on localhost, and on wherever the deployment terminates TLS -- the
+    # cookie is the only credential the browser holds, so sending it in the clear
+    # anywhere reachable would undo the point of keeping authority server-side.
+    cookie_secure: bool = False
+
     # Where the record of confirmed actions lives. Defaults beside the index but is
     # settable on its own, because it is the one file here that is not disposable:
     # a deployment will want it on a durable volume while index artifacts are rebuilt.

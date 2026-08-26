@@ -57,8 +57,10 @@ def sign_in(body: SignIn, request: Request, response: Response) -> dict[str, obj
         httponly=True,
         samesite="lax",
         # The app is served from the same origin as the API, so the cookie needs no
-        # cross-site relaxation. Secure is left to the deployment: it must be on
-        # behind TLS, and would break a plain-HTTP local run.
+        # cross-site relaxation. Secure follows the deployment rather than being
+        # hard-coded: it must be on behind TLS, and would break a plain-HTTP local
+        # run, so it is a setting the environment turns on.
+        secure=runtime.settings.cookie_secure,
         path="/",
     )
     # Described from the session just created, not from the request: the cookie
