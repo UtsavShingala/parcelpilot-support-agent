@@ -120,13 +120,48 @@ class CompatibleModelClient:
                 tools=list(tools) or None,  # type: ignore[arg-type]
             )
         except OpenAIError as error:
-            raise ModelUnavailable(str(error)) from error
+            raise ModelUnavailable(_human_message(error)) from error
 
         choice = response.choices[0].message
         return ModelReply(
             text=choice.content or "",
             tool_calls=tuple(_from_wire(call) for call in (choice.tool_calls or [])),
         )
+
+
+def _human_message(error: Exception) -> str:
+    """Say what went wrong in a sentence someone can act on.
+
+    Providers return their diagnostics as nested JSON meant for a log, and putting
+    that in front of a visitor makes a working system look broken. The distinction
+    that matters to a reader is short: is this temporary, is it spent, or is it
+    misconfigured? The raw text is still appended for whoever is debugging.
+    """
+    raw = str(error)
+    status = getattr(error, "status_code", None)
+    lowered = raw.lower()
+
+    if status == 429 or "resource_exhausted" in lowered or "quota" in lowered:
+        headline = (
+            "This demo has reached its request limit with the model provider. "
+            "It resets on the provider's schedule; try again later."
+        )
+    elif status in {401, 403} or "api key" in lowered or "permission" in lowered:
+        headline = "The model credentials are not valid, so the assistant cannot answer."
+    elif status is not None and status >= 500:
+        headline = "The model provider is having trouble. This is usually temporary."
+    elif "timeout" in lowered or "timed out" in lowered or "connection" in lowered:
+        headline = "The model could not be reached in time. This is usually temporary."
+    else:
+        return raw
+
+    return f"{headline} (provider said: {_first_line(raw)})"
+
+
+def _first_line(raw: str, limit: int = 160) -> str:
+    """The first useful fragment of a provider error, without the JSON dump."""
+    text = " ".join(raw.split())
+    return text if len(text) <= limit else f"{text[:limit].rstrip()}..."
 
 
 def available_models(*, api_key: str, base_url: str = "") -> list[str]:
