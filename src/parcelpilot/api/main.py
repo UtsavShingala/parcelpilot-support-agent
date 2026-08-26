@@ -82,24 +82,36 @@ def create_app(
 
     root = static_dir if static_dir is not None else static_root()
     if root is not None and (root / "index.html").is_file():
+        bundle = root.resolve()
         app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
         # response_model=None: the return type is a union of responses, which FastAPI
         # would otherwise try to build a Pydantic response model from and reject.
         @app.get("/{path:path}", response_model=None)
         def spa(path: str) -> FileResponse | JSONResponse:
-            """Serve a real file if it exists, otherwise the app shell.
+            """Serve a real file from the bundle, otherwise the app shell.
 
             An unknown /api/* path must still look like a missing endpoint rather
             than silently returning HTML, which would turn a typo into a confusing
             JSON parse error in the client.
+
+            Every candidate is resolved and confined to the bundle directory. The
+            path arrives from the URL, Starlette does not collapse ``..`` inside a
+            path parameter, and the server percent-decodes ``%2f`` before this sees
+            it -- so joining it to a directory and trusting the result served any
+            file on the host. ``/..%2f..%2f.env`` returned the model API key, and
+            the SQLite database with every account's orders and tickets, to anyone,
+            with no session at all. That bypassed the entire access-control layer
+            without going near the model.
             """
             if path.startswith("api/"):
                 return JSONResponse({"detail": "not found"}, status_code=404)
-            candidate = root / path
-            if path and candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(root / "index.html")
+
+            if path:
+                candidate = (bundle / path).resolve()
+                if candidate.is_file() and candidate.is_relative_to(bundle):
+                    return FileResponse(candidate)
+            return FileResponse(bundle / "index.html")
 
     return app
 

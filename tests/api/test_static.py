@@ -83,3 +83,43 @@ def test_a_missing_bundle_is_not_an_error(corpus_dir: Path, tmp_path: Path) -> N
 def test_static_root_reports_where_the_bundle_was_found() -> None:
     root = static_root()
     assert root is None or (root / "index.html").is_file()
+
+
+# -- containment ----------------------------------------------------------------
+
+TRAVERSALS = [
+    "/..%2f..%2f.env",
+    "/..%2f..%2fpyproject.toml",
+    "/..%2f..%2fdata%2findex%2fparcelpilot.db",
+    "/../../.env",
+    "/..%2F..%2F.env",
+    "/%2e%2e%2f%2e%2e%2f.env",
+    "/assets/..%2f..%2f..%2f.env",
+    "/a/../../../.env",
+]
+
+
+@pytest.mark.parametrize("path", TRAVERSALS)
+def test_no_path_escapes_the_bundle(served: TestClient, path: str) -> None:
+    """A hand-rolled file handler served any file on the host.
+
+    The path arrives from the URL, Starlette does not collapse ".." inside a path
+    parameter, and the server percent-decodes "%2f" first -- so joining it to the
+    static root and trusting the result returned the model API key and the SQLite
+    database to anyone, with no session. It bypassed the whole access-control layer
+    without going near the model.
+    """
+    response = served.get(path)
+
+    assert "MODEL_API_KEY" not in response.text
+    assert "[project]" not in response.text
+    assert "SQLite format" not in response.text
+    # Anything outside the bundle falls back to the app shell, never to the file.
+    assert response.status_code in {200, 404}
+    if response.status_code == 200:
+        assert "app shell" in response.text
+
+
+def test_a_real_file_inside_the_bundle_is_still_served(served: TestClient) -> None:
+    """The fix must not break the thing the route exists for."""
+    assert "console.log" in served.get("/assets/index.js").text
