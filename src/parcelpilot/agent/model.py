@@ -19,6 +19,13 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 Role = Literal["system", "user", "assistant", "tool"]
 
+# Higher than the SDK's default of two. A turn is several requests, and losing the
+# last one throws away every tool call that already succeeded -- the visible cost of
+# a transient 503 is not one retry, it is the whole answer. Providers under load
+# return these in bursts, so the extra attempts are spread by the SDK's backoff and
+# cost nothing when the provider is healthy.
+MAX_RETRIES = 5
+
 
 @dataclass(frozen=True)
 class ToolCall:
@@ -92,6 +99,7 @@ class CompatibleModelClient:
         model: str,
         base_url: str = "",
         timeout: float = 60.0,
+        max_retries: int = MAX_RETRIES,
     ) -> None:
         if not api_key:
             raise ModelUnavailable(
@@ -100,7 +108,10 @@ class CompatibleModelClient:
         from openai import OpenAI
 
         self._client = OpenAI(
-            api_key=api_key, timeout=timeout, **({"base_url": base_url} if base_url else {})
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=max_retries,
+            **({"base_url": base_url} if base_url else {}),
         )
         self._model = model
 

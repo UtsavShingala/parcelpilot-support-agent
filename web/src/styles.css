@@ -388,6 +388,67 @@ body {
   margin: 6px 0 2px;
 }
 
+
+/* -- aside panels --------------------------------------------------------- */
+
+/* Evidence has to be present without shouting. Collapsed, a panel is one line
+   saying what is inside; opened, it is the full detail. */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.panel--open {
+  background: transparent;
+}
+
+.panel__head {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.panel__head:disabled {
+  cursor: default;
+}
+
+.panel__title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.panel__summary {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.panel__chevron {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.panel__body {
+  padding: 0 0 8px;
+}
+
+.panel__stack {
+  display: grid;
+  gap: 6px;
+  padding: 0 4px;
+}
+
 /* -- tool cards ----------------------------------------------------------- */
 
 .tool {

@@ -11,6 +11,7 @@
 import { useEffect, useRef } from "react";
 import type { SessionInfo, Turn } from "../types";
 import { AnswerBody } from "./AnswerBody";
+import { AsidePanel } from "./AsidePanel";
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { SourceCitation } from "./SourceCitation";
 import { ToolCallCard } from "./ToolCallCard";
@@ -21,6 +22,37 @@ const SUGGESTIONS = [
   "What is my first response target for a P1?",
   "I want to escalate this to a human",
 ];
+
+
+const TIER_NOUN: Record<string, [string, string]> = {
+  AGREEMENT: ["agreement", "agreements"],
+  CURRENT_POLICY: ["policy", "policies"],
+  PRODUCT_DOC: ["product doc", "product docs"],
+  HISTORICAL: ["past ticket", "past tickets"],
+  DEPRECATED: ["superseded doc", "superseded docs"],
+};
+
+function describeWork(turn: Turn): string {
+  if (!turn.done) {
+    const running = turn.tools.find((call) => call.status === "running");
+    return running ? "running…" : `${turn.tools.length} step(s)`;
+  }
+  const failed = turn.tools.filter((call) => call.status === "error").length;
+  const steps = `${turn.tools.length} step${turn.tools.length === 1 ? "" : "s"}`;
+  return failed ? `${steps} · ${failed} failed` : steps;
+}
+
+function describeSources(turn: Turn): string {
+  const counts = new Map<string, number>();
+  for (const source of turn.citations) {
+    counts.set(source.authority_tier, (counts.get(source.authority_tier) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()].map(([tier, count]) => {
+    const [one, many] = TIER_NOUN[tier] ?? [tier, tier];
+    return `${count} ${count === 1 ? one : many}`;
+  });
+  return parts.join(", ");
+}
 
 export function ChatWindow({
   session,
@@ -37,12 +69,15 @@ export function ChatWindow({
   onAsk: (question: string) => void;
   onSignOut: () => void;
 }) {
-  const bottom = useRef<HTMLDivElement>(null);
+  const latest = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
+  // Scroll to the top of the newest turn, not the bottom of the page. The sources
+  // panel makes a turn several screens tall, and scrolling to the end of it lands
+  // the reader on citations for an answer they have not seen yet.
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns, busy]);
+    latest.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [turns.length]);
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -99,7 +134,11 @@ export function ChatWindow({
         )}
 
         {turns.map((turn, index) => (
-          <article className="turn" key={index}>
+          <article
+            className="turn"
+            key={index}
+            ref={index === turns.length - 1 ? latest : undefined}
+          >
             {/* The conversation itself: question, then answer, then anything the
                 reader has to act on. Nothing between the question and its answer. */}
             <div className="turn__main">
@@ -131,15 +170,24 @@ export function ChatWindow({
                 stays available. */}
             <aside className="turn__aside">
               {turn.tools.length > 0 && (
-                <section className="turn__tools">
-                  <h3>Work</h3>
-                  {turn.tools.map((call) => (
-                    <ToolCallCard call={call} key={`${call.step}-${call.name}`} />
-                  ))}
-                </section>
+                <AsidePanel
+                  // Held open while the turn runs: with no answer yet, watching the
+                  // tools work is the content.
+                  open={!turn.done ? true : undefined}
+                  summary={describeWork(turn)}
+                  title="Work"
+                >
+                  <div className="panel__stack">
+                    {turn.tools.map((call) => (
+                      <ToolCallCard call={call} key={`${call.step}-${call.name}`} />
+                    ))}
+                  </div>
+                </AsidePanel>
               )}
 
               {turn.conflicts.length > 0 && (
+                // Never folded away. Two lines, and it is the finding the whole
+                // authority hierarchy exists to produce.
                 <section className="conflicts">
                   <h3>Sources disagree</h3>
                   {turn.conflicts.map((conflict) => (
@@ -149,18 +197,18 @@ export function ChatWindow({
               )}
 
               {turn.citations.length > 0 && (
-                <section className="turn__sources">
-                  <h3>Sources</h3>
-                  {turn.citations.map((source) => (
-                    <SourceCitation key={source.citation} source={source} />
-                  ))}
-                </section>
+                <AsidePanel summary={describeSources(turn)} title="Sources">
+                  <div className="panel__stack">
+                    {turn.citations.map((source) => (
+                      <SourceCitation key={source.citation} source={source} />
+                    ))}
+                  </div>
+                </AsidePanel>
               )}
             </aside>
           </article>
         ))}
 
-        <div ref={bottom} />
       </div>
 
       {error && <p className="failure failure--banner">{error}</p>}
