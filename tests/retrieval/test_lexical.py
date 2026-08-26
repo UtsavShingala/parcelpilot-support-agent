@@ -65,7 +65,7 @@ def test_an_unmatched_query_scores_everything_zero() -> None:
 
 
 def test_a_term_in_most_of_the_corpus_still_carries_signal() -> None:
-    """Pins the BM25+ choice: Okapi's IDF zeroes out terms this common."""
+    """Pins the IDF choice: Okapi's formula zeroes out terms this common."""
     index = LexicalIndex(
         [
             "cancellation terms and cancellation fees",
@@ -93,3 +93,13 @@ def test_an_index_of_empty_documents_does_not_raise() -> None:
 def test_an_empty_query_scores_everything_zero() -> None:
     index = LexicalIndex(["cancellation fee applies"])
     assert index.scores("   ") == [0.0]
+
+
+def test_a_passage_sharing_no_terms_with_the_query_scores_zero() -> None:
+    """The relevance gate depends on this: BM25+ gives every passage a floor instead."""
+    index = LexicalIndex(
+        ["bulk upload fails on large files", "dedicated account manager contact details"]
+    )
+    matching, unrelated = index.scores("bulk upload")
+    assert matching > 0.0
+    assert unrelated == 0.0
