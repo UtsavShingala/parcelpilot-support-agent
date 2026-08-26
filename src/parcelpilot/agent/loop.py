@@ -86,6 +86,11 @@ class SupportAgent:
         ]
         tools = self._registry.schemas_for(caller.role)
         drafted: list[ActionDraft] = []
+        # Which calls have already run this turn, so an identical one can be answered
+        # from what is already in the conversation instead of spending a step on it.
+        completed: dict[str, int] = {}
+        # What was tried, in order, so a handover can say what ground was covered.
+        attempted: list[str] = []
 
         for step in range(1, self._max_steps + 1):
             try:
@@ -108,7 +113,8 @@ class SupportAgent:
             )
 
             for call in reply.tool_calls:
-                events, result = self._run_call(call, caller, step)
+                attempted.append(_describe_attempt(call))
+                events, result = self._run_call(call, caller, step, completed)
                 for event in events:
                     yield event
                     if isinstance(event, ActionDrafted):
@@ -122,18 +128,48 @@ class SupportAgent:
                     )
                 )
 
-        yield from self._escalate_at_ceiling(caller, drafted)
+        yield from self._escalate_at_ceiling(caller, question, attempted)
 
     # -- one tool call ----------------------------------------------------------
 
     def _run_call(
-        self, call: ToolCall, caller: CallerContext, step: int
+        self,
+        call: ToolCall,
+        caller: CallerContext,
+        step: int,
+        completed: dict[str, int],
     ) -> tuple[list[AgentEvent], ToolCallResult]:
         tool = self._registry.get(call.name)
         mutating = bool(tool and tool.mutating)
         events: list[AgentEvent] = [
             ToolStarted(name=call.name, arguments=call.arguments, step=step, mutating=mutating)
         ]
+
+        signature = _signature(call)
+        first_seen = completed.get(signature)
+        if first_seen is not None:
+            # Identical call, same turn. Running it again would return the same bytes
+            # the model already has, and models that repeat a call tend to keep
+            # repeating it until the step ceiling turns an answerable question into
+            # an escalation. Answering from the transcript ends that cheaply.
+            result = ToolCallResult(
+                name=call.name,
+                arguments=call.arguments,
+                ok=True,
+                payload=_already_answered(call.name, first_seen),
+                mutating=mutating,
+            )
+            events.append(
+                ToolFinished(
+                    name=call.name,
+                    ok=True,
+                    step=step,
+                    summary=f"already run at step {first_seen}; reusing that result",
+                    mutating=mutating,
+                    payload=None,
+                )
+            )
+            return events, result
 
         if call.parse_error:
             result = ToolCallResult(
@@ -158,6 +194,9 @@ class SupportAgent:
             )
         )
 
+        if result.ok:
+            completed[signature] = step
+
         if result.ok and call.name in PREPARE_TOOLS:
             draft = ActionDraft.from_dict(result.payload)
             events.append(ActionDrafted(draft=draft))
@@ -175,13 +214,17 @@ class SupportAgent:
     # -- giving up --------------------------------------------------------------
 
     def _escalate_at_ceiling(
-        self, caller: CallerContext, drafted: list[ActionDraft]
+        self, caller: CallerContext, question: str, attempted: Sequence[str]
     ) -> Iterator[AgentEvent]:
-        """Hand over rather than retry. Retrying would buy a worse version of this."""
-        detail = (
-            f"The assistant made {self._max_steps} tool calls without reaching an "
-            "answer. A support agent should take this over."
-        )
+        """Hand over rather than retry. Retrying would buy a worse version of this.
+
+        The handover has to be usable by the person who receives it. A step count is
+        a diagnostic about this system, not a description of anyone's problem -- the
+        agent who picks this up needs the customer's question and what was already
+        looked at, or they start from nothing and the escalation has cost the
+        customer time rather than saving it.
+        """
+        detail = _handover_note(question, attempted, self._max_steps)
         result = self._registry.dispatch(
             "prepare_escalation",
             {"reason": detail, "severity": "P3"},
@@ -191,7 +234,6 @@ class SupportAgent:
         draft: ActionDraft | None = None
         if result.ok:
             draft = ActionDraft.from_dict(result.payload)
-            drafted.append(draft)
             yield ActionDrafted(draft=draft)
 
         yield Escalated(reason=CEILING_REASON, detail=detail, draft=draft)
@@ -238,6 +280,58 @@ def collect(events: Iterator[AgentEvent]) -> Turn:
 def _has_escalation(drafts: Sequence[ActionDraft]) -> bool:
     return any(draft.kind is ActionKind.ESCALATION for draft in drafts)
 
+
+def _signature(call: ToolCall) -> str:
+    """Identity of a tool call: its name and its arguments, order-independent."""
+    return json.dumps(
+        {"name": call.name, "arguments": call.arguments}, sort_keys=True, default=str
+    )
+
+
+def _already_answered(name: str, step: int) -> dict[str, Any]:
+    """What to hand back for a call that has already run this turn.
+
+    Deliberately short. Repeating the payload would double the tokens and invite
+    another repeat; a pointer to the earlier result costs almost nothing and tells
+    the model plainly that it already has what it is asking for.
+    """
+    return {
+        "repeat_of_step": step,
+        "note": (
+            f"You already called {name} with these exact arguments at step {step}, and "
+            "its result is earlier in this conversation. Do not call it again. Use that "
+            "result, or answer with what you have."
+        ),
+    }
+
+
+
+def _describe_attempt(call: ToolCall) -> str:
+    """One tool call, phrased for a person rather than a log."""
+    subject = (
+        call.arguments.get("query")
+        or call.arguments.get("order_id")
+        or call.arguments.get("ticket_id")
+        or call.arguments.get("account_id")
+        or ""
+    )
+    return f"{call.name}({subject})" if subject else call.name
+
+
+def _handover_note(question: str, attempted: Sequence[str], ceiling: int) -> str:
+    """What the support agent receiving this escalation needs to know."""
+    asked = question.strip() or "an unstated question"
+    unique: list[str] = []
+    for attempt in attempted:
+        if attempt not in unique:
+            unique.append(attempt)
+
+    covered = "; ".join(unique[:8]) or "nothing"
+    return (
+        f'The customer asked: "{asked}". The assistant could not reach a confident '
+        f"answer within its {ceiling}-step limit and stopped rather than guess. "
+        f"Already looked at: {covered}. Please pick this up from there."
+    )
 
 def _summarise(result: ToolCallResult) -> str:
     """A one-line description of what a tool call produced, for the transcript."""
