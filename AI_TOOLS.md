@@ -15,6 +15,15 @@ with a brief to find defects rather than to agree. Deliberately a different mode
 from the one that wrote the code: an author reviewing its own work re-reads its own
 assumptions.
 
+**These three documents** were drafted with Claude Code as well, from the actual
+repository and from measurements taken against it, then edited. Saying so matters
+here: a note about AI use that was itself AI-drafted and did not mention it would be
+undermining its own point. One claim in `ARCHITECTURE.md` did not survive being
+checked — a retrieval score quoted from an earlier session that could not be
+reproduced against the current ranker — and was replaced with a measurement taken
+fresh. That is the failure mode this whole document is about, showing up in the
+document about it.
+
 **Google Gemini** is what the shipped product calls at runtime — a product
 dependency, not a development tool. It is behind an OpenAI-compatible client
 abstraction, and the reason it is Gemini rather than OpenAI is billing, not
@@ -91,8 +100,8 @@ frequency, not at the end.
 
 ## What I would keep
 
-Using a different model to review than to write. It found four real defects,
-including the two most serious in the codebase, and it had no stake in the
+Using a different model to review than to write. It found the two most serious
+defects in the codebase and half a dozen smaller ones, and it had no stake in the
 explanations that made them look reasonable.
 
 Making the system runnable without a key. `--scripted` exists because a provider

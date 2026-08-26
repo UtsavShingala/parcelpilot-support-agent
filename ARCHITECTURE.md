@@ -178,10 +178,12 @@ may be wrong.
 ### Deprecated is excluded, not demoted
 
 This is the trap most likely to be failed quietly, and down-weighting does not
-solve it. Measured: the v2 policy scores **0.836** lexically on a support-target
-question, because v2 is a near-copy of v3 with different numbers — often worded
-*closer* to the question than its replacement. Any multiplier gentle enough to be
-defensible leaves it able to win.
+solve it. v2 is a near-copy of v3 with different numbers, so it is frequently worded
+*closer* to the question than its replacement. Measured across a 27-query sweep with
+the filter removed: v2 takes the **top** lexical slot outright on two queries, and
+reaches **0.919 at rank 2** on a plainly-phrased support question ("How do
+escalations get approved?"). Any multiplier gentle enough to be defensible leaves it
+able to win, and at rank 2 it is inside the answer's context regardless.
 
 So it is filtered out before scoring. Callers that genuinely need it — to explain
 what changed — ask for it explicitly.
