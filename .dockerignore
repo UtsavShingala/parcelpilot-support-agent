@@ -1,0 +1,21 @@
+# Build context hygiene: keep the image small and the build reproducible.
+.git
+.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+tests
+.env
+.env.local
+
+# Generated artifacts -- rebuilt inside the image from the corpus.
+data/index/*
+!data/index/.gitkeep
+
+# NOTE: data/raw is deliberately NOT ignored. It is absent from the repository but
+# present in a local checkout, so a local `docker build` bakes the corpus in. A
+# build from a git clone will not have it -- see the deployment note in README.

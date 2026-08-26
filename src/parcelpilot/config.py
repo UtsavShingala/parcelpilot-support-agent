@@ -12,7 +12,23 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+
+def _project_root() -> Path:
+    """Where relative paths are anchored.
+
+    In a checkout this is the repository root, found by walking up to pyproject.toml.
+    In a container the package is installed rather than laid out in src/, so no such
+    marker exists above it -- counting parent directories would land somewhere inside
+    site-packages and quietly look for the corpus there. Falling back to the working
+    directory puts it where the image actually placed the data.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "pyproject.toml").is_file():
+            return candidate
+    return Path.cwd()
+
+
+REPO_ROOT = _project_root()
 
 # Corpus name -> directory beneath ``data_dir``. Names not listed here resolve to a
 # directory of the same name, so adding a corpus needs no code change.
