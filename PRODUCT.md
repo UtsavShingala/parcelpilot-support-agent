@@ -119,6 +119,53 @@ need its own screen; it needed to be true everywhere.
 
 ---
 
+## Built beyond the brief
+
+None of the following was asked for. Each is here because the product is worse
+without it, and each cost little enough that not building it would have been the
+odd choice.
+
+**It runs with no API key at all.** `--scripted` swaps the model for a deterministic
+client while every other layer — tools, scoping, authority ranking, the confirmation
+gate — executes for real. Built because a provider went down mid-project and the
+whole system became undemonstrable in an instant. A demo that dies when someone
+else's service does is not a demo, and a support product that cannot be exercised
+without spending money cannot be tested by the people who need to trust it. The
+interface labels it, so an assembled answer is never mistaken for a reasoned one.
+
+**A model that is down does not take the product down with it.** Overload, quota
+exhaustion and timeout are per-model conditions, so the client tries the next name
+on a list. Over one afternoon three different models each went unavailable while the
+others answered fine. Support is the function customers reach for when something has
+already gone wrong; being unavailable then is worse than being unavailable generally.
+
+**Every figure in an answer is bound to the passage it came from.** Not required, and
+the single most valuable thing here. Without it a hallucinated threshold produced a
+precise, well-cited, wrong answer — the exact failure the product exists to prevent,
+wearing the costume of a good one.
+
+**The cost of an answer is bounded.** A repeat guard, a per-tool budget and a
+wall-clock ceiling on the turn. This is a product constraint before it is an
+engineering one: a support assistant whose cost per answer is unpredictable cannot be
+priced, and one that leaves a customer watching a spinner for three minutes has
+already failed regardless of what it eventually says.
+
+**The public URL assumes strangers.** Opaque server-side sessions, a per-visitor
+message allowance where failed turns still count, and oversized input rejected before
+any work happens. A demo link that a stranger can drain is a demo link that stops
+working before the person you sent it to opens it.
+
+**Nothing about the customer roster is written in code.** Personas are read out of
+the account table, and the severity rules are read out of the policy's own wording.
+The brief says evaluators will test with different records; a hard-coded roster would
+be a second copy of the data that goes stale the moment the workbook changes.
+
+**The audit ledger is a separate file from the corpus.** Rebuilding the index must
+never erase the record of something the system actually did. The corpus is
+disposable; what was done on someone's account is not.
+
+---
+
 ## The one metric
 
 **Correct containment: the share of customer questions the assistant closed without
