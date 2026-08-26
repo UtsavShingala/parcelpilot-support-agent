@@ -1,0 +1,41 @@
+# --- Assessment data pack (not ours to redistribute) ---
+data/raw/*
+!data/raw/.gitkeep
+
+# --- Generated build artifacts ---
+data/index/*
+!data/index/.gitkeep
+*.db
+*.sqlite3
+
+# --- Secrets ---
+.env
+.env.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# --- Node / frontend ---
+node_modules/
+web/dist/
+web/.vite/
+npm-debug.log*
+
+# --- Editors / OS ---
+.vscode/*
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

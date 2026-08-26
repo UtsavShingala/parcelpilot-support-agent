@@ -1,0 +1,40 @@
+[project]
+name = "parcelpilot"
+version = "0.1.0"
+description = "Agentic RAG support system for a B2B logistics desk"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sse-starlette>=2.1",
+    "anthropic>=0.40",
+    "pypdf>=5.1",
+    "openpyxl>=3.1",
+    "pandas>=2.2",
+    "rank-bm25>=0.2.2",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+embeddings = ["voyageai>=0.3"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8", "pyyaml>=6.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/parcelpilot"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

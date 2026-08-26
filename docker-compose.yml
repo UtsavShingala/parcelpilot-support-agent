@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      # Mounted rather than copied: the assessment pack is not baked into the image.
+      - ./data/raw:/app/data/raw:ro
+      - ./data/index:/app/data/index
