@@ -12,6 +12,9 @@ export interface Persona {
 
 export interface SessionInfo {
   persona: Persona;
+  /** Whether this caller is ParcelPilot staff. Decides which views are offered;
+      the endpoints enforce it independently. */
+  internal: boolean;
   messages_remaining: number;
   messages_allowed: number;
   snapshot_at: string;
@@ -120,4 +123,38 @@ export interface Turn {
   conflicts: Conflict[];
   failure?: string;
   done: boolean;
+}
+
+// -- operations view ------------------------------------------------------------
+
+export interface Signal {
+  kind: string;
+  severity: "P1" | "P2" | "P3" | "info";
+  title: string;
+  detail: string;
+  tickets: string[];
+  accounts: string[];
+  citations: string[];
+  elapsed_minutes: number | null;
+  target: string | null;
+}
+
+export interface ActionRecord {
+  action_id: number;
+  draft_id: string;
+  kind: string;
+  summary: string;
+  details: Record<string, unknown>;
+  account_id: string | null;
+  performed_by: string;
+  effective_at: string;
+  recorded_at: string;
+}
+
+export interface InsightsView {
+  snapshot_at: string;
+  scope: string;
+  signals: Signal[];
+  counts: Record<string, number>;
+  escalations: ActionRecord[];
 }

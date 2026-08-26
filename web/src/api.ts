@@ -6,7 +6,7 @@
 // string, and the session cookie rides along without any of EventSource's
 // cross-origin caveats.
 
-import type { AgentEvent, Roster, SessionInfo } from "./types";
+import type { AgentEvent, InsightsView, Roster, SessionInfo } from "./types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -50,6 +50,10 @@ export async function signIn(personaId: string): Promise<SessionInfo> {
       body: JSON.stringify({ persona_id: personaId }),
     }),
   );
+}
+
+export async function fetchInsights(): Promise<InsightsView> {
+  return unwrap<InsightsView>(await fetch("/api/insights"));
 }
 
 export async function signOut(): Promise<void> {

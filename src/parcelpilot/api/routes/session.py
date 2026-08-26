@@ -83,6 +83,9 @@ def sign_out(request: Request, response: Response) -> dict[str, str]:
 def _describe(runtime: Runtime, session: ChatSession) -> dict[str, object]:
     return {
         "persona": session.persona.to_public_dict(),
+        # Which views to offer. Not an authorisation claim: every endpoint decides
+        # for itself, so a browser asserting otherwise gains nothing.
+        "internal": session.caller.is_internal,
         "messages_remaining": runtime.sessions.remaining(session),
         "messages_allowed": runtime.sessions.max_messages,
         "snapshot_at": runtime.snapshot_at.isoformat(),

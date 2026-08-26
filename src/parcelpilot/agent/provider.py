@@ -32,7 +32,9 @@ def build_model_client(settings: Settings | None = None) -> ModelClient:
     return CompatibleModelClient(
         api_key=settings.model_api_key,
         model=settings.model_name,
+        fallbacks=settings.fallback_models,
         base_url=settings.model_base_url,
+        timeout=settings.model_timeout_seconds,
     )
 
 

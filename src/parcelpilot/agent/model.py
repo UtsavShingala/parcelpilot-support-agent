@@ -19,12 +19,17 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 Role = Literal["system", "user", "assistant", "tool"]
 
-# Higher than the SDK's default of two. A turn is several requests, and losing the
-# last one throws away every tool call that already succeeded -- the visible cost of
-# a transient 503 is not one retry, it is the whole answer. Providers under load
-# return these in bursts, so the extra attempts are spread by the SDK's backoff and
-# cost nothing when the provider is healthy.
-MAX_RETRIES = 5
+# Higher than the SDK's default of two, but not by much, because the two failures
+# worth retrying pull in opposite directions.
+#
+# A 503 fails in about two seconds and clears on the next attempt, so retries are
+# nearly free and save an answer whose tool work is already done. A timeout fails
+# slowly, and retrying sends the same oversized prompt that was too slow the first
+# time -- every attempt costs the full timeout before it gives up.
+#
+# Three attempts covers the bursty case without letting a slow one hang the page for
+# the better part of ten minutes.
+MAX_RETRIES = 3
 
 
 @dataclass(frozen=True)
@@ -97,6 +102,7 @@ class CompatibleModelClient:
         *,
         api_key: str,
         model: str,
+        fallbacks: Sequence[str] = (),
         base_url: str = "",
         timeout: float = 60.0,
         max_retries: int = MAX_RETRIES,
@@ -113,31 +119,58 @@ class CompatibleModelClient:
             max_retries=max_retries,
             **({"base_url": base_url} if base_url else {}),
         )
-        self._model = model
+        # Tried in order. Retrying one model harder does not help when that model is
+        # the thing that is overloaded, and per-model daily quotas mean a second
+        # model is often available when the first is spent.
+        self._models = [model, *(name for name in fallbacks if name and name != model)]
 
     @property
     def model(self) -> str:
-        return self._model
+        return self._models[0]
 
     def reply(
         self, *, messages: Sequence[Message], tools: Sequence[dict[str, Any]]
     ) -> ModelReply:
         from openai import OpenAIError
 
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[_to_wire(message) for message in messages],  # type: ignore[arg-type]
-                tools=list(tools) or None,  # type: ignore[arg-type]
-            )
-        except OpenAIError as error:
-            raise ModelUnavailable(_human_message(error)) from error
+        wire = [_to_wire(message) for message in messages]
+        offered = list(tools) or None
 
-        choice = response.choices[0].message
-        return ModelReply(
-            text=choice.content or "",
-            tool_calls=tuple(_from_wire(call) for call in (choice.tool_calls or [])),
-        )
+        for position, name in enumerate(self._models):
+            last = position == len(self._models) - 1
+            try:
+                response = self._client.chat.completions.create(
+                    model=name,
+                    messages=wire,  # type: ignore[arg-type]
+                    tools=offered,  # type: ignore[arg-type]
+                )
+            except OpenAIError as error:
+                if last or not _worth_another_model(error):
+                    raise ModelUnavailable(_human_message(error)) from error
+                continue
+
+            choice = response.choices[0].message
+            return ModelReply(
+                text=choice.content or "",
+                tool_calls=tuple(_from_wire(call) for call in (choice.tool_calls or [])),
+            )
+
+        raise ModelUnavailable("no model was configured")  # pragma: no cover
+
+
+def _worth_another_model(error: Exception) -> bool:
+    """Whether a different model might succeed where this one just failed.
+
+    Overload and quota are properties of one model, not of the key: a 503 means
+    that model is busy, and free-tier quota is counted per model per day. Both
+    clear by asking a different one. A bad key or a malformed request would fail
+    identically everywhere, so those are reported rather than retried around.
+    """
+    status = getattr(error, "status_code", None)
+    if status is not None:
+        return status == 429 or status >= 500
+    text = str(error).lower()
+    return "timeout" in text or "timed out" in text or "connection" in text
 
 
 def _human_message(error: Exception) -> str:

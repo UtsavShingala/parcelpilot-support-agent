@@ -8,10 +8,11 @@
 // A turn renders as it happens rather than on completion: tool cards appear in
 // the order they run, so a reader watching sees the answer being reached.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SessionInfo, Turn } from "../types";
 import { AnswerBody } from "./AnswerBody";
 import { AsidePanel } from "./AsidePanel";
+import { OpsView } from "./OpsView";
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { SourceCitation } from "./SourceCitation";
 import { ToolCallCard } from "./ToolCallCard";
@@ -69,6 +70,9 @@ export function ChatWindow({
   onAsk: (question: string) => void;
   onSignOut: () => void;
 }) {
+  // Staff get a second view. Customers never see the tab, and the endpoint behind
+  // it refuses them anyway -- the tab is convenience, the refusal is the control.
+  const [tab, setTab] = useState<"chat" | "ops">("chat");
   const latest = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
@@ -96,6 +100,25 @@ export function ChatWindow({
           <strong>{session.persona.label}</strong>
           <span className="chat__persona">{session.persona.description}</span>
         </div>
+        {session.internal && (
+          <nav className="tabs">
+            <button
+              className={`tab ${tab === "chat" ? "tab--on" : ""}`}
+              onClick={() => setTab("chat")}
+              type="button"
+            >
+              Chat
+            </button>
+            <button
+              className={`tab ${tab === "ops" ? "tab--on" : ""}`}
+              onClick={() => setTab("ops")}
+              type="button"
+            >
+              Needs attention
+            </button>
+          </nav>
+        )}
+
         <div className="chat__right">
           <span className={`mode mode--${session.mode}`} title={session.mode_description}>
             {session.mode}
@@ -109,6 +132,14 @@ export function ChatWindow({
         </div>
       </header>
 
+      {tab === "ops" ? (
+        <OpsView
+          onAsk={(question) => {
+            setTab("chat");
+            onAsk(question);
+          }}
+        />
+      ) : (
       <div className="chat__scroll">
         {turns.length === 0 && (
           <div className="empty">
@@ -210,9 +241,11 @@ export function ChatWindow({
         ))}
 
       </div>
+      )}
 
       {error && <p className="failure failure--banner">{error}</p>}
 
+      {tab === "chat" && (
       <form className="composer" onSubmit={submit}>
         <textarea
           disabled={busy || exhausted}
@@ -235,6 +268,7 @@ export function ChatWindow({
           Ask
         </button>
       </form>
+      )}
     </div>
   );
 }

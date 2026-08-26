@@ -66,6 +66,18 @@ class Settings(BaseSettings):
         default="gemini-3.7-flash",
         validation_alias=AliasChoices("MODEL_NAME", "OPENAI_MODEL", "GEMINI_MODEL"),
     )
+    # Tried in order when the configured model is overloaded or out of quota. Both
+    # are per-model conditions, so a second name is the cheapest available recovery
+    # -- and over one afternoon three different Gemini models each went unavailable
+    # at some point while the others answered fine.
+    model_fallbacks: str = "gemini-3.6-flash,gemini-3.5-flash,gemini-3.7-flash"
+
+    # How long one model request may take. An ops question can run six tool calls,
+    # and each request carries the whole conversation so far -- the last one is the
+    # slowest and the most expensive to lose. Sixty seconds cut those off after the
+    # work was already done.
+    model_timeout_seconds: float = 120.0
+
     model_base_url: str = Field(
         default="https://generativelanguage.googleapis.com/v1beta/openai/",
         validation_alias=AliasChoices("MODEL_BASE_URL", "OPENAI_BASE_URL"),
@@ -120,6 +132,10 @@ class Settings(BaseSettings):
         if self.actions_db is not None:
             return self._resolve(self.actions_db)
         return self.index_path / f"{self.corpus}_actions.db"
+
+    @property
+    def fallback_models(self) -> list[str]:
+        return [name.strip() for name in self.model_fallbacks.split(",") if name.strip()]
 
     @property
     def has_model_credentials(self) -> bool:

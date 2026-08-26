@@ -43,6 +43,15 @@ CEILING_REASON = "the assistant could not resolve this within its step limit"
 
 PREPARE_TOOLS = {"prepare_escalation", "prepare_ticket_update", "prepare_follow_up"}
 
+# How many times one tool may run in a single turn before further calls are refused.
+#
+# The repeat guard catches identical calls; this catches the other shape, where a
+# model rephrases the same search over and over. Six distinct searches for one
+# question is not thoroughness, it is not knowing when to stop -- and it cost three
+# and a half minutes and twelve steps on an ops question that then escalated anyway.
+# Three attempts at one tool is generous for a corpus of twenty-five passages.
+MAX_CALLS_PER_TOOL = 3
+
 
 @dataclass(frozen=True)
 class Turn:
@@ -89,6 +98,8 @@ class SupportAgent:
         # Which calls have already run this turn, so an identical one can be answered
         # from what is already in the conversation instead of spending a step on it.
         completed: dict[str, int] = {}
+        # How many times each tool has run, so one can be capped without capping all.
+        used: dict[str, int] = {}
         # What was tried, in order, so a handover can say what ground was covered.
         attempted: list[str] = []
 
@@ -114,7 +125,7 @@ class SupportAgent:
 
             for call in reply.tool_calls:
                 attempted.append(_describe_attempt(call))
-                events, result = self._run_call(call, caller, step, completed)
+                events, result = self._run_call(call, caller, step, completed, used)
                 for event in events:
                     yield event
                     if isinstance(event, ActionDrafted):
@@ -138,12 +149,33 @@ class SupportAgent:
         caller: CallerContext,
         step: int,
         completed: dict[str, int],
+        used: dict[str, int],
     ) -> tuple[list[AgentEvent], ToolCallResult]:
         tool = self._registry.get(call.name)
         mutating = bool(tool and tool.mutating)
         events: list[AgentEvent] = [
             ToolStarted(name=call.name, arguments=call.arguments, step=step, mutating=mutating)
         ]
+
+        spent = used.get(call.name, 0)
+        if spent >= MAX_CALLS_PER_TOOL and call.name not in PREPARE_TOOLS:
+            result = ToolCallResult(
+                name=call.name,
+                arguments=call.arguments,
+                ok=True,
+                payload=_budget_spent(call.name, spent),
+                mutating=mutating,
+            )
+            events.append(
+                ToolFinished(
+                    name=call.name,
+                    ok=True,
+                    step=step,
+                    summary=f"{call.name} already used {spent} times this turn",
+                    mutating=mutating,
+                )
+            )
+            return events, result
 
         signature = _signature(call)
         first_seen = completed.get(signature)
@@ -196,6 +228,7 @@ class SupportAgent:
 
         if result.ok:
             completed[signature] = step
+            used[call.name] = spent + 1
 
         if result.ok and call.name in PREPARE_TOOLS:
             draft = ActionDraft.from_dict(result.payload)
@@ -332,6 +365,19 @@ def _handover_note(question: str, attempted: Sequence[str], ceiling: int) -> str
         f"answer within its {ceiling}-step limit and stopped rather than guess. "
         f"Already looked at: {covered}. Please pick this up from there."
     )
+
+def _budget_spent(name: str, spent: int) -> dict[str, Any]:
+    """Told plainly, once a tool has been leaned on enough for one question."""
+    return {
+        "calls_used": spent,
+        "note": (
+            f"You have already called {name} {spent} times for this question and its "
+            "results are earlier in this conversation. Do not call it again. Answer "
+            "from what you have, or if the documents genuinely do not cover this, "
+            "prepare an escalation and say what is missing."
+        ),
+    }
+
 
 def _summarise(result: ToolCallResult) -> str:
     """A one-line description of what a tool call produced, for the transcript."""

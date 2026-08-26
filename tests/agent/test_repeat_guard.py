@@ -187,3 +187,42 @@ def test_argument_order_does_not_make_a_call_look_new() -> None:
 
     _run(Reordered(), registry)
     assert registry.runs == 1
+
+
+def test_one_tool_cannot_be_leaned_on_forever() -> None:
+    """The other shape of looping: the same search, rephrased, over and over.
+
+    Distinct arguments each time, so the repeat guard correctly allows them. Six
+    searches for one question cost three and a half minutes on a live model and
+    escalated anyway.
+    """
+    registry = _CountingRegistry()
+
+    class Rephrasing:
+        def __init__(self) -> None:
+            self.step = 0
+
+        def reply(self, *, messages: Sequence[Message], tools: Sequence[dict[str, Any]]):
+            self.step += 1
+            if self.step <= 6:
+                return ModelReply(
+                    tool_calls=(
+                        ToolCall(
+                            call_id=f"c{self.step}",
+                            name="lookup_orders",
+                            arguments={"order_id": f"ORD-{self.step}"},
+                        ),
+                    )
+                )
+            return ModelReply(text="done")
+
+    turn = _run(Rephrasing(), registry)
+
+    assert registry.runs == 3, "the per-tool budget did not stop the search"
+    assert turn.answer == "done"
+    refusals = [
+        event
+        for event in turn.events
+        if event.type == "tool_result" and "already used" in event.summary
+    ]
+    assert len(refusals) == 3
