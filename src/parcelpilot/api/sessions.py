@@ -33,6 +33,10 @@ SESSION_COOKIE = "pp_session"
 # page can read it either.
 TOKEN_BYTES = 32
 
+# Six messages -- three question-and-answer pairs. Enough for "and that one?" to
+# resolve, short enough that the prompt does not grow without bound.
+HISTORY_MESSAGES = 6
+
 
 class SessionLimitReached(RuntimeError):
     """A session has used its allowance of messages."""
@@ -54,6 +58,25 @@ class ChatSession:
 
     def remember(self, draft: ActionDraft) -> None:
         self.drafts[draft.draft_id] = draft
+
+    def remember_exchange(self, question: str, answer: str) -> None:
+        """Keep the question and its answer so the next turn can refer back to them.
+
+        Only the question and the final answer, never the tool transcript. A
+        follow-up needs to know what was asked and what was concluded; replaying
+        every past search result would grow the prompt without improving the answer,
+        and would have the model reasoning over a stale lookup rather than reading
+        the data again.
+
+        Older turns are dropped once the window is full. A support conversation
+        refers back a turn or two, not twenty, and an unbounded history is an
+        unbounded bill.
+        """
+        self.history.append(Message(role="user", content=question))
+        self.history.append(Message(role="assistant", content=answer))
+        excess = len(self.history) - HISTORY_MESSAGES
+        if excess > 0:
+            del self.history[:excess]
 
     def draft(self, draft_id: str) -> ActionDraft | None:
         return self.drafts.get(draft_id)

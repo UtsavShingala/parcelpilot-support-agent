@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from parcelpilot.agent.events import ActionDrafted
+from parcelpilot.agent.events import ActionDrafted, Completed
 from parcelpilot.api.dependencies import current_session, runtime_of
 from parcelpilot.api.errors import rate_limited
 from parcelpilot.api.runtime import Runtime
@@ -70,15 +70,21 @@ def _stream(
     yield sse_error(
         f"{remaining} message(s) left in this session", kind="session_status"
     )
+    answer = ""
     try:
         for event in runtime.agent.run(session.caller, question, history=session.history):
             if isinstance(event, ActionDrafted):
                 # Held server-side so confirmation names a draft we already know,
                 # rather than accepting one the browser composed.
                 session.remember(event.draft)
+            if isinstance(event, Completed):
+                answer = event.text
             yield sse(event)
     except Exception as error:  # noqa: BLE001 - the stream must not die silently
         yield sse_error(f"the assistant stopped unexpectedly: {error}")
+    finally:
+        if answer:
+            session.remember_exchange(question, answer)
 
 
 __all__ = ["router"]
