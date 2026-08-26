@@ -165,13 +165,53 @@ def test_recorded_resolutions_are_flagged_as_unverified(signals: list[Signal]) -
     assert flagged == {"TKT-450", "TKT-451"}
 
 
-def test_an_account_with_an_agreement_makes_the_risk_concrete(
+def test_a_clause_on_the_same_subject_makes_the_risk_concrete(
     signals: list[Signal],
 ) -> None:
+    """TKT-450's answer was about cancellation fees, and Northstar's agreement
+    waives exactly that -- so the flag can name the clause rather than gesture at
+    the contract."""
     stale = next(
         s for s in _of_kind(signals, "unverified_past_answer") if s.tickets == ("TKT-450",)
     )
-    assert "signed agreement that may override" in stale.detail
+
+    assert stale.severity == "P3"
+    assert stale.citations == (
+        "ParcelPilot - Northstar Logistics Enterprise Agreement - 2. Shipment cancellation",
+    )
+    assert "covers the same ground" in stale.detail
+
+
+def test_an_agreement_on_a_different_subject_is_not_cited(
+    signals: list[Signal],
+) -> None:
+    """The ops view committing this system's own failure, in miniature.
+
+    TKT-451 is about CSV row limits. LumenWorks has an agreement, but it covers
+    support targets, cancellation and pickup credits -- it says nothing about
+    uploads. Claiming it "may override" asserted a relationship the corpus does not
+    contain, on the strength of the account having *any* contract.
+    """
+    stale = next(
+        s for s in _of_kind(signals, "unverified_past_answer") if s.tickets == ("TKT-451",)
+    )
+
+    assert stale.severity == "info"
+    assert stale.citations == ()
+    assert "context only" in stale.detail
+
+
+def test_a_how_to_question_is_not_promoted_by_a_failure_word() -> None:
+    """Severity picks which SLA target a signal is measured against, so a P2/P3
+    mix-up silently swaps the deadline too."""
+    assert classify("How do I fix the failed login?").level == "P3"
+    assert classify("How do we update the broken webhook URL?").level == "P3"
+
+
+def test_a_how_to_question_about_a_leaked_key_is_still_a_p1() -> None:
+    """Grammar does not downgrade a security incident."""
+    found = classify("How do I rotate the API key I accidentally leaked?")
+    assert found.level == "P1"
 
 
 # -- ordering and scope ---------------------------------------------------------

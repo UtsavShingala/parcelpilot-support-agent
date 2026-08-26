@@ -26,7 +26,7 @@ from typing import Any
 from parcelpilot.auth.context import CallerContext
 from parcelpilot.data.queries import OperationalData
 from parcelpilot.ingest.authority import AuthorityTier
-from parcelpilot.ingest.documents import Chunk
+from parcelpilot.ingest.documents import HEADER_SECTION_TITLE, Chunk
 from parcelpilot.insights.severity import Severity, classify
 from parcelpilot.insights.targets import Target, targets_for
 from parcelpilot.retrieval.text import content_terms
@@ -264,11 +264,17 @@ def _unverified_guidance(tickets: list[_Ticket], chunks: list[Chunk]) -> list[Si
     theoretical: the answer given may have been correct against the general policy
     and wrong for that customer.
     """
-    scoped = {
-        chunk.scope
+    agreements = [
+        chunk
         for chunk in chunks
-        if chunk.tier is AuthorityTier.AGREEMENT and chunk.is_deprecated is False
-    }
+        if chunk.tier is AuthorityTier.AGREEMENT
+        and not chunk.is_deprecated
+        # The header states who an agreement covers, not what it says. Matching a
+        # resolution against "Account: ACCT-002 Customer: LumenWorks Plan: Growth"
+        # pairs any mention of a plan name with a contract that may say nothing on
+        # the subject -- which is the false positive this whole check is fixing.
+        and chunk.heading != HEADER_SECTION_TITLE
+    ]
 
     signals: list[Signal] = []
     for ticket in tickets:
@@ -276,26 +282,48 @@ def _unverified_guidance(tickets: list[_Ticket], chunks: list[Chunk]) -> list[Si
         if not resolution:
             continue
 
-        covered = ticket.account_id in scoped
+        clause = _agreement_on_topic(agreements, ticket.account_id, resolution)
         signals.append(
             Signal(
                 kind="unverified_past_answer",
-                severity="P3" if covered else "info",
+                severity="P3" if clause else "info",
                 title=f"{ticket.ticket_id}: past answer not re-checked",
                 detail=(
                     f'Recorded resolution: "{resolution}" '
                     + (
-                        "This account has a signed agreement that may override the "
-                        "general policy the answer was based on."
-                        if covered
+                        f"{clause.citation} covers the same ground and may override the "
+                        "general policy this answer was based on."
+                        if clause
                         else "Historical resolutions are context only and may be wrong."
                     )
                 ),
                 tickets=(ticket.ticket_id,),
                 accounts=(ticket.account_id,),
+                citations=(clause.citation,) if clause else (),
             )
         )
     return signals
+
+
+def _agreement_on_topic(
+    agreements: list[Chunk], account_id: str, resolution: str
+) -> Chunk | None:
+    """A clause of this account's agreement that speaks to what the answer said.
+
+    Merely having an agreement is not enough. LumenWorks has one, but it covers
+    support targets, cancellation and pickup credits -- so citing it against a
+    ticket about CSV row limits asserts a relationship the corpus does not contain.
+    That is this system's own failure mode, produced by the view meant to catch it.
+    """
+    terms = content_terms(resolution)
+    best: tuple[int, Chunk] | None = None
+    for chunk in agreements:
+        if chunk.scope != account_id:
+            continue
+        shared = len(terms & content_terms(chunk.text))
+        if shared >= MATCH_TERMS and (best is None or shared > best[0]):
+            best = (shared, chunk)
+    return best[1] if best else None
 
 
 __all__ = ["AT_RISK_FRACTION", "MATCH_TERMS", "Signal", "detect"]
