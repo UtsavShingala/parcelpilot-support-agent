@@ -1,6 +1,10 @@
 """Search the corpus, weighted by how far each source may be trusted.
 
-Two rules shape every result set.
+Three rules shape every result set.
+
+**A caller only ever sees material they are entitled to.** Account scoping is
+applied before scoring, so another customer's agreement cannot be ranked, quoted
+or counted -- see :mod:`parcelpilot.retrieval.scope`.
 
 **Superseded material is excluded, not merely demoted.** A deprecated policy is
 often worded more like the question than its replacement -- the pack's v2 policy
@@ -26,6 +30,7 @@ from parcelpilot.ingest.authority import AuthorityTier
 from parcelpilot.ingest.build_index import load_chunks
 from parcelpilot.ingest.documents import Chunk
 from parcelpilot.retrieval.lexical import LexicalIndex
+from parcelpilot.retrieval.scope import AccountScope
 from parcelpilot.retrieval.text import content_terms
 
 DEFAULT_LIMIT = 6
@@ -90,14 +95,21 @@ class DocumentStore:
         self,
         query: str,
         *,
+        scope: AccountScope | None = None,
         limit: int = DEFAULT_LIMIT,
         include_deprecated: bool = False,
     ) -> list[RetrievedChunk]:
         """Return the best matches for ``query``, most authoritative first among equals.
 
-        Passages that match nothing in the query are dropped before authority is
-        applied, so seniority can never manufacture relevance.
+        Passages the caller may not see are dropped before scoring, so another
+        account's agreement cannot be quoted, ranked or counted. Passages that match
+        nothing in the query are dropped before authority is applied, so seniority
+        can never manufacture relevance.
+
+        ``scope`` defaults to :meth:`AccountScope.none`: forgetting to pass a caller
+        context yields general material only, never everything.
         """
+        visible = scope or AccountScope.none()
         scores = self._index.scores(query)
         terms = content_terms(query)
 
@@ -108,10 +120,17 @@ class DocumentStore:
                 matched_terms=tuple(sorted(terms & content_terms(chunk.search_text))),
             )
             for chunk, score in zip(self._chunks, scores, strict=True)
-            if score > 0.0 and (include_deprecated or not chunk.is_deprecated)
+            if visible.permits(chunk.scope)
+            and score > 0.0
+            and (include_deprecated or not chunk.is_deprecated)
         ]
         hits.sort(key=lambda hit: (-hit.score, hit.chunk.chunk_id))
         return hits[:limit]
+
+    def visible_chunks(self, scope: AccountScope | None = None) -> list[Chunk]:
+        """Every chunk ``scope`` may read. Useful for auditing what a caller can reach."""
+        visible = scope or AccountScope.none()
+        return [chunk for chunk in self._chunks if visible.permits(chunk.scope)]
 
     def superseded_by_tier(self, tier: AuthorityTier) -> list[Chunk]:
         """Every chunk at ``tier``. Used to explain what a current document replaced."""
