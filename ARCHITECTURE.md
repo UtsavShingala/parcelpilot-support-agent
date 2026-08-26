@@ -150,8 +150,9 @@ Both obvious off-the-shelf variants fail at 25 documents:
 - **BM25+** fixes the negative IDF by adding a constant to every term's
   contribution, *including for documents that do not contain the term*. Every
   passage then scores above zero for any query, so "did this match at all?" stops
-  being answerable. Measured directly: 23 of 25 chunks were candidates for every
-  question, silently disabling the relevance gate. After the switch, 11.
+  being answerable. Reproduced against this corpus: **every one of the 25 chunks is
+  a candidate for every question**, silently disabling the relevance gate
+  altogether. Under the current ranker, a mean of 11.
 
 Lucene's IDF — `ln(1 + (N−n+0.5)/(n+0.5))` — is positive for every term while a
 passage sharing no terms with the query scores exactly zero. Both properties at

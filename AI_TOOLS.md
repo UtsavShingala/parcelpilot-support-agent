@@ -56,9 +56,9 @@ This is the part worth reading.
 **Retrieval that looked correct and was not.** The first ranker used an
 off-the-shelf `BM25Plus`, which adds a constant to every document's score — so
 nothing ever scores zero and "did this passage match at all?" stops being
-answerable. Measured: 23 of 25 chunks were candidates for *every* question. Reading
+answerable. Measured: *every* chunk was a candidate for *every* question. Reading
 the code did not reveal this; printing the candidate set did. Replaced with a
-hand-rolled BM25 using Lucene's IDF; candidates dropped to 11.
+hand-rolled BM25 using Lucene's IDF; candidates dropped to a mean of 11.
 
 **A hallucinated number was indistinguishable from a correct one.** The calculator
 takes policy figures as arguments — correct, so that nothing hard-codes a threshold
