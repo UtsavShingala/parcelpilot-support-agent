@@ -1363,6 +1363,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "sse-starlette" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1393,6 +1394,7 @@ requires-dist = [
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "sse-starlette", specifier = ">=2.1" },
+    { name = "tzdata", specifier = ">=2024.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
     { name = "voyageai", marker = "extra == 'embeddings'", specifier = ">=0.3" },
 ]
