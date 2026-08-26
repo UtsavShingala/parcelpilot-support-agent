@@ -45,6 +45,21 @@ class Plan:
 
 
 PLANS: tuple[Plan, ...] = (
+    # First, because someone asking for a person has said what they want plainly and
+    # no amount of retrieval should talk them out of it.
+    Plan(
+        name="escalation",
+        triggers=(
+            "escalate",
+            "escalation",
+            "speak to a human",
+            "talk to a human",
+            "to a human",
+            "real person",
+            "raise this",
+        ),
+        search_query="escalation when a request needs human judgment",
+    ),
     Plan(
         name="cancellation",
         triggers=("cancel", "cancellation", "cancelling", "call off"),
@@ -146,6 +161,22 @@ def _next_call(
 
     if _seen(results, "search_documents") is None and "search_documents" in available:
         return _call("search_documents", query=plan.search_query, limit=6)
+
+    if plan.name == "escalation":
+        # Drafted, never performed. The draft is what a person is then asked to
+        # confirm, which is the same two-phase path a live model takes.
+        if "prepare_escalation" in available and _seen(results, "prepare_escalation") is None:
+            return _call(
+                "prepare_escalation",
+                reason=(
+                    f"The customer asked for a person: {question.strip()}"
+                    if question.strip()
+                    else "The customer asked for a person."
+                ),
+                severity="P3",
+                **({"order_id": record_id} if record_id else {}),
+            )
+        return None
 
     if "calculate" in available and _seen(results, "calculate") is None:
         return _calculation(plan, results, record_id)

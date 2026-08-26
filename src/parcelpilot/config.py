@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     max_agent_steps: int = 12
     max_messages_per_session: int = 25
 
+    # Where the record of confirmed actions lives. Defaults beside the index but is
+    # settable on its own, because it is the one file here that is not disposable:
+    # a deployment will want it on a durable volume while index artifacts are rebuilt.
+    actions_db: Path | None = None
+
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else REPO_ROOT / path
 
@@ -78,6 +83,8 @@ class Settings(BaseSettings):
         Deliberately a separate file from the corpus database: rebuilding the corpus
         must not erase a record of something the system actually did.
         """
+        if self.actions_db is not None:
+            return self._resolve(self.actions_db)
         return self.index_path / f"{self.corpus}_actions.db"
 
     @property
