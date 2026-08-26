@@ -22,8 +22,12 @@ _CORPUS_DIRECTORIES = {"parcelpilot": "raw"}
 class Settings(BaseSettings):
     """Settings read from the environment, falling back to committed defaults."""
 
+    # The env file is resolved against the repository root, not the working
+    # directory. A relative path silently loads nothing when the process is started
+    # from anywhere else -- which reads as "the key is wrong" rather than "the key
+    # was never read".
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"
     )
 
     corpus: str = "parcelpilot"
