@@ -313,11 +313,25 @@ def test_the_step_ceiling_escalates_rather_than_retrying(
     assert "handover" in turn.answer
 
 
-def test_the_ceiling_escalation_names_what_went_wrong(
+def test_the_ceiling_handover_is_written_for_the_person_receiving_it(
     registry: ToolRegistry, snapshot: Any
 ) -> None:
-    turn = collect(_agent(registry, LoopingClient(), snapshot, steps=2).run(SUPPORT, "loop"))
-    assert "2 tool calls without reaching an answer" in turn.drafts[-1].details["reason"]
+    """A step count describes this system, not the customer's problem.
+
+    Whoever picks the escalation up needs the question and the ground already
+    covered, or the handover has cost the customer time instead of saving it.
+    """
+    turn = collect(
+        _agent(registry, LoopingClient(), snapshot, steps=2).run(
+            SUPPORT, "why was my pickup missed?"
+        )
+    )
+    reason = turn.drafts[-1].details["reason"]
+
+    assert "why was my pickup missed?" in reason, "the question was not carried over"
+    assert "Already looked at" in reason, "no account of what was tried"
+    assert "2-step limit" in reason
+    assert "pick this up" in reason
 
 
 def test_completion_reports_that_the_turn_escalated(
