@@ -1,12 +1,16 @@
 // The conversation.
 //
-// A turn is rendered as it happens: tool cards appear in the order they run, the
-// answer arrives after them, and the sources it rested on sit underneath. The
-// ordering is deliberate -- the work is shown before the conclusion, so the
-// conclusion reads as something that was reached rather than asserted.
+// Two columns. The question and its answer sit together with nothing between
+// them, so the conversation reads as a conversation. The working -- which tools
+// ran, on what, and which sources came back -- sits alongside, visible without
+// interrupting the read and expandable when someone wants to audit it.
+//
+// A turn renders as it happens rather than on completion: tool cards appear in
+// the order they run, so a reader watching sees the answer being reached.
 
 import { useEffect, useRef } from "react";
 import type { SessionInfo, Turn } from "../types";
+import { AnswerBody } from "./AnswerBody";
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { SourceCitation } from "./SourceCitation";
 import { ToolCallCard } from "./ToolCallCard";
@@ -96,51 +100,66 @@ export function ChatWindow({
 
         {turns.map((turn, index) => (
           <article className="turn" key={index}>
-            <p className="turn__question">{turn.question}</p>
+            {/* The conversation itself: question, then answer, then anything the
+                reader has to act on. Nothing between the question and its answer. */}
+            <div className="turn__main">
+              <p className="turn__question">{turn.question}</p>
 
-            {turn.tools.length > 0 && (
-              <section className="turn__tools">
-                {turn.tools.map((call) => (
-                  <ToolCallCard call={call} key={`${call.step}-${call.name}`} />
-                ))}
-              </section>
-            )}
+              {turn.answer ? (
+                <div className="turn__answer">
+                  <AnswerBody text={turn.answer} />
+                </div>
+              ) : (
+                !turn.failure && <p className="thinking">Working…</p>
+              )}
 
-            {turn.conflicts.length > 0 && (
-              <section className="conflicts">
-                <h3>Sources disagree</h3>
-                {turn.conflicts.map((conflict) => (
-                  <p key={conflict.explanation}>{conflict.explanation}</p>
-                ))}
-              </section>
-            )}
+              {turn.escalation && (
+                <section className="escalation">
+                  <strong>Handed to a person.</strong> {turn.escalation.detail}
+                </section>
+              )}
 
-            {turn.escalation && (
-              <section className="escalation">
-                <strong>Handed to a person.</strong> {turn.escalation.detail}
-              </section>
-            )}
+              {turn.drafts.map((draft) => (
+                <ConfirmActionCard draft={draft} key={draft.draft_id} />
+              ))}
 
-            {turn.answer && <div className="turn__answer">{turn.answer}</div>}
+              {turn.failure && <p className="failure">{turn.failure}</p>}
+            </div>
 
-            {turn.drafts.map((draft) => (
-              <ConfirmActionCard draft={draft} key={draft.draft_id} />
-            ))}
+            {/* The working: what it did and what it read. Beside the answer rather
+                than above it, so the conversation stays readable and the evidence
+                stays available. */}
+            <aside className="turn__aside">
+              {turn.tools.length > 0 && (
+                <section className="turn__tools">
+                  <h3>Work</h3>
+                  {turn.tools.map((call) => (
+                    <ToolCallCard call={call} key={`${call.step}-${call.name}`} />
+                  ))}
+                </section>
+              )}
 
-            {turn.citations.length > 0 && (
-              <section className="turn__sources">
-                <h3>Sources</h3>
-                {turn.citations.map((source) => (
-                  <SourceCitation key={source.citation} source={source} />
-                ))}
-              </section>
-            )}
+              {turn.conflicts.length > 0 && (
+                <section className="conflicts">
+                  <h3>Sources disagree</h3>
+                  {turn.conflicts.map((conflict) => (
+                    <p key={conflict.explanation}>{conflict.explanation}</p>
+                  ))}
+                </section>
+              )}
 
-            {turn.failure && <p className="failure">{turn.failure}</p>}
+              {turn.citations.length > 0 && (
+                <section className="turn__sources">
+                  <h3>Sources</h3>
+                  {turn.citations.map((source) => (
+                    <SourceCitation key={source.citation} source={source} />
+                  ))}
+                </section>
+              )}
+            </aside>
           </article>
         ))}
 
-        {busy && <p className="thinking">Working…</p>}
         <div ref={bottom} />
       </div>
 

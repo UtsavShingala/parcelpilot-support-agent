@@ -21,12 +21,17 @@ const TOOL_LABEL: Record<string, string> = {
 export function ToolCallCard({ call }: { call: ToolCall }) {
   const [open, setOpen] = useState(false);
   const label = TOOL_LABEL[call.name] ?? call.name;
+  // Two searches in one turn are common and otherwise look like a duplicate row.
+  const subject = [call.arguments.query, call.arguments.order_id, call.arguments.ticket_id]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={`tool tool--${call.status}`}>
       <button className="tool__head" onClick={() => setOpen(!open)} type="button">
         <span className={`tool__dot tool__dot--${call.status}`} aria-hidden="true" />
         <span className="tool__name">{label}</span>
+        {subject && <span className="tool__subject">{String(subject)}</span>}
         {call.mutating && (
           <span className="tool__badge" title="Prepares only; nothing is written">
             needs confirmation

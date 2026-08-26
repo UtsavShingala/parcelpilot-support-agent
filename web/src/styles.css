@@ -37,7 +37,7 @@ body {
 }
 
 .app {
-  max-width: 940px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 16px;
   min-height: 100vh;
@@ -174,11 +174,75 @@ body {
   margin-top: 12px;
 }
 
+/* Conversation on the left, the working beside it. The question and its answer
+   sit together with nothing in between; tool calls and sources are available
+   without interrupting the read. */
 .turn {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+  gap: 20px;
   border-top: 1px solid var(--line);
   padding-top: 16px;
+}
+
+.turn__main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.turn__aside {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  position: sticky;
+  top: 16px;
+}
+
+.turn__aside h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+/* Narrow viewports: the aside falls below the answer rather than squeezing it. */
+@media (max-width: 900px) {
+  .turn {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .turn__aside {
+    position: static;
+  }
+}
+
+/* The aside is a third of the width, so its cards stack instead of sitting on
+   one line. */
+.turn__aside .tool__head,
+.turn__aside .citation__head {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.turn__aside .tool__summary {
+  margin-left: 0;
+  white-space: normal;
+}
+
+.turn__aside .tool__subject {
+  max-width: 100%;
+}
+
+.turn__aside .citation__title {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.turn__aside .conflicts p {
+  font-size: 13px;
 }
 
 .turn__question {
@@ -188,12 +252,125 @@ body {
 }
 
 .turn__answer {
-  white-space: pre-wrap;
   background: var(--panel);
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 4px 16px 14px;
+}
+
+/* Rendered markdown. Models answer in it, and the difference between a support
+   answer and a wall of asterisks is whether anyone renders it. */
+.answer > :first-child {
+  margin-top: 10px;
+}
+
+.answer > :last-child {
+  margin-bottom: 0;
+}
+
+.answer p {
+  margin: 10px 0;
+}
+
+.answer h1,
+.answer h2,
+.answer h3,
+.answer h4 {
+  margin: 18px 0 6px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.answer h1 {
+  font-size: 18px;
+}
+.answer h2 {
+  font-size: 17px;
+}
+.answer h3,
+.answer h4 {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.answer strong {
+  color: #fff;
+  font-weight: 650;
+}
+
+.answer ul,
+.answer ol {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.answer li {
+  margin: 5px 0;
+}
+
+.answer li > p {
+  margin: 0;
+}
+
+.answer code {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 13px;
+}
+
+.answer pre {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.answer pre code {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.answer blockquote {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.answer table {
+  border-collapse: collapse;
+  margin: 10px 0;
+  display: block;
+  overflow-x: auto;
+}
+
+.answer th,
+.answer td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.answer th {
+  background: var(--panel-2);
+}
+
+.answer hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+
+.answer a {
+  color: var(--accent);
 }
 
 .turn__tools,
@@ -273,10 +450,21 @@ body {
   padding: 1px 7px;
 }
 
+.tool__subject {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 32ch;
+}
+
 .tool__summary {
   color: var(--muted);
   margin-left: auto;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .tool__chevron {
