@@ -6,7 +6,6 @@ need it skip rather than fail on a fresh clone.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
