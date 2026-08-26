@@ -18,9 +18,11 @@ data/raw/
 └── ParcelPilot_Assessment_Data.xlsx
 ```
 
-**Do not rename these files.** The ingest pipeline reads authority metadata out of the
-filename: `v3_CURRENT` versus `v2_DEPRECATED` decides which policy version is allowed to
-win an answer, and the company name identifies which account an agreement is scoped to.
+Filenames are not load-bearing. Each document states its own status, effective date and
+account in a header block -- `Status: DEPRECATED`, `Superseded by:`, `Account: ACCT-001` --
+and that is where the ingest pipeline reads authority from. Renaming a file changes
+nothing; editing its header changes everything. Keeping the original names is still
+suggested simply so the listing above stays recognisable.
 
 Once the files are in place:
 
@@ -28,14 +30,17 @@ Once the files are in place:
 python -m parcelpilot.ingest.build_index
 ```
 
-## `synthetic/` — an alternative corpus (committed)
+## `synthetic/` — an alternative corpus (not yet written)
 
-A second document set for a different fictional company, carrying the same structural
-traps: a superseded policy version, customer agreements that override general terms, and
-a ticket log containing incorrect historical resolutions.
+Reserved for a second document set covering a different fictional company, carrying the
+same structural traps: a superseded policy version, customer agreements that override
+general terms, and a ticket log containing incorrect historical resolutions. Selecting it
+would be `CORPUS=synthetic`.
 
-It exists so the system can be shown to be corpus-agnostic rather than tuned to one
-document set. Select it with `CORPUS=synthetic`.
+The ingest pipeline is already corpus-agnostic -- heading structure comes from relative
+font sizes, authority from header blocks, and database tables from whatever sheets the
+workbook happens to contain -- so no code has to change to support it. The corpus itself
+is deliberately deferred until the submission is complete.
 
 ## `index/` — build artifacts (not committed)
 
