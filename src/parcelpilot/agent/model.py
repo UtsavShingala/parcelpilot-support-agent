@@ -98,6 +98,23 @@ class OpenAIModelClient:
         )
 
 
+def available_models(*, api_key: str) -> list[str]:
+    """Model ids this account can actually reach, newest first.
+
+    Worth asking rather than assuming: the lineup moves, and a stale model id fails
+    at the first real request rather than at configuration time.
+    """
+    if not api_key:
+        raise ModelUnavailable("no OPENAI_API_KEY is configured")
+    from openai import OpenAI, OpenAIError
+
+    try:
+        models = list(OpenAI(api_key=api_key).models.list())
+    except OpenAIError as error:
+        raise ModelUnavailable(str(error)) from error
+    return [model.id for model in sorted(models, key=lambda m: -(m.created or 0))]
+
+
 def _to_wire(message: Message) -> dict[str, Any]:
     """Translate a neutral message into the chat completions shape."""
     if message.role == "tool":

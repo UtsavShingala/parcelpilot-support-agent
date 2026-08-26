@@ -32,7 +32,12 @@ from parcelpilot.agent.events import (
     ToolStarted,
 )
 from parcelpilot.agent.loop import SupportAgent, Turn, collect
-from parcelpilot.agent.model import ModelClient, ModelUnavailable, OpenAIModelClient
+from parcelpilot.agent.model import (
+    ModelClient,
+    ModelUnavailable,
+    OpenAIModelClient,
+    available_models,
+)
 from parcelpilot.agent.registry import build_registry
 from parcelpilot.agent.tools.actions import ActionLedger
 from parcelpilot.auth.personas import Persona, find_persona, open_personas
@@ -219,6 +224,28 @@ def command_compare(
     return 0
 
 
+def command_models(settings: Settings) -> int:
+    """List the models this key can reach, so the configured id is never a guess."""
+    try:
+        models = available_models(api_key=settings.openai_api_key)
+    except ModelUnavailable as error:
+        print(f"\nCannot list models: {error}")
+        return 2
+
+    print(f"\n{len(models)} model(s) available to this key, newest first:\n")
+    for model_id in models:
+        marker = "   <- configured in .env" if model_id == settings.openai_model else ""
+        print(f"  {model_id}{marker}")
+
+    if settings.openai_model not in models:
+        print(
+            f"\nWARNING: OPENAI_MODEL is {settings.openai_model!r}, which is not in this "
+            "list. Every request will fail until .env is changed."
+        )
+    print("\nPick the cheapest one that supports tool calling; check your pricing page.")
+    return 0
+
+
 def command_ledger(session: Session, persona_id: str) -> int:
     persona = _resolve(session, persona_id)
     records = session.ledger.records(persona.context)
@@ -258,11 +285,16 @@ def main(argv: list[str] | None = None) -> int:
         "--confirm-all", action="store_const", const="y", default="n", dest="confirm_all"
     )
 
+    sub.add_parser("models", help="list models this key can reach, and flag a stale id")
+
     ledger = sub.add_parser("ledger", help="show confirmed actions a persona may see")
     ledger.add_argument("-p", "--persona", required=True)
 
     arguments = parser.parse_args(argv)
     settings = get_settings()
+
+    if arguments.command == "models":  # talks to the provider, builds no session
+        return command_models(settings)
 
     try:
         session = build_session(settings)
