@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from parcelpilot.config import Settings
+from parcelpilot.config import Settings, get_settings
 from parcelpilot.ingest.authority import AuthorityTier
 from parcelpilot.ingest.build_index import build, load_chunks, main
 
@@ -58,8 +58,24 @@ def test_a_missing_corpus_fails_with_a_pointer_to_the_setup_notes(tmp_path: Path
 
 
 def test_the_command_line_entry_point_reports_what_it_built(
-    capsys: pytest.CaptureFixture[str], corpus_dir: Path
+    capsys: pytest.CaptureFixture[str],
+    corpus_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Built into a temporary index, not the real one.
+
+    The entry point reads settings from the environment, so without this it would
+    rewrite the working index -- which fails outright on Windows if a dev server
+    happens to have the database open, and is rude to whoever is using it either way.
+    """
+    monkeypatch.setenv("INDEX_DIR", str(tmp_path / "index"))
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "parcelpilot.ingest.build_index.get_settings",
+        lambda: Settings(index_dir=tmp_path / "index"),
+    )
+
     assert main([]) == 0
     report = capsys.readouterr().out
     assert "documents" in report
