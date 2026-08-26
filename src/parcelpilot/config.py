@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-5"
 
+    # Run the deterministic client instead of calling a provider. A real mode, not a
+    # test switch: it lets the whole pipeline be demonstrated and deployed with no
+    # credentials, and keeps the demo alive when a budget is spent or a provider is
+    # down. The interface labels it, so an assembled answer is never mistaken for a
+    # reasoned one.
+    scripted: bool = False
+
     # A question needing more than this many tool round-trips is not converging;
     # the agent escalates rather than spending more of someone else's money on it.
     max_agent_steps: int = 12

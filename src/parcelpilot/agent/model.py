@@ -63,6 +63,9 @@ class ModelClient(Protocol):
 class OpenAIModelClient:
     """:class:`ModelClient` backed by the OpenAI chat completions API."""
 
+    name = "openai"
+    """What an interface should call this mode. The scripted client answers too."""
+
     def __init__(self, *, api_key: str, model: str, timeout: float = 60.0) -> None:
         if not api_key:
             raise ModelUnavailable(

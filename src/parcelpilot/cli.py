@@ -32,12 +32,8 @@ from parcelpilot.agent.events import (
     ToolStarted,
 )
 from parcelpilot.agent.loop import SupportAgent, Turn, collect
-from parcelpilot.agent.model import (
-    ModelClient,
-    ModelUnavailable,
-    OpenAIModelClient,
-    available_models,
-)
+from parcelpilot.agent.model import ModelClient, ModelUnavailable, available_models
+from parcelpilot.agent.provider import build_model_client
 from parcelpilot.agent.registry import build_registry
 from parcelpilot.agent.tools.actions import ActionLedger
 from parcelpilot.auth.personas import Persona, find_persona, open_personas
@@ -68,9 +64,7 @@ def build_session(settings: Settings, client: ModelClient | None = None) -> Sess
     data = OperationalData.open(settings)
     store = DocumentStore.from_settings(settings)
     registry = build_registry(store, data)
-    model = client or OpenAIModelClient(
-        api_key=settings.openai_api_key, model=settings.openai_model
-    )
+    model = client or build_model_client(settings)
     return Session(
         settings=settings,
         data=data,
@@ -262,12 +256,26 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
-    parser = argparse.ArgumentParser(prog="parcelpilot", description=__doc__)
+    # Accepted before or after the subcommand. argparse only honours a top-level
+    # option ahead of the subcommand, and "--scripted" typed at the end of a long
+    # question is the natural thing to write, so every subparser inherits it too.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--scripted",
+        action="store_true",
+        help="answer with the deterministic client instead of calling a provider",
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="parcelpilot", description=__doc__, parents=[common]
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("personas", help="list the sign-in roster read from the workbook")
+    sub.add_parser(
+        "personas", help="list the sign-in roster read from the workbook", parents=[common]
+    )
 
-    ask = sub.add_parser("ask", help="ask a question as one or more personas")
+    ask = sub.add_parser("ask", help="ask a question as one or more personas", parents=[common])
     ask.add_argument("question")
     ask.add_argument("-p", "--persona", action="append", required=True, dest="personas")
     ask.add_argument(
@@ -278,20 +286,28 @@ def main(argv: list[str] | None = None) -> int:
         help="confirm every prepared action without prompting",
     )
 
-    compare = sub.add_parser("compare", help="ask the same question as several personas")
+    compare = sub.add_parser(
+        "compare", help="ask the same question as several personas", parents=[common]
+    )
     compare.add_argument("question")
     compare.add_argument("-p", "--persona", action="append", required=True, dest="personas")
     compare.add_argument(
         "--confirm-all", action="store_const", const="y", default="n", dest="confirm_all"
     )
 
-    sub.add_parser("models", help="list models this key can reach, and flag a stale id")
+    sub.add_parser(
+        "models", help="list models this key can reach, and flag a stale id", parents=[common]
+    )
 
-    ledger = sub.add_parser("ledger", help="show confirmed actions a persona may see")
+    ledger = sub.add_parser(
+        "ledger", help="show confirmed actions a persona may see", parents=[common]
+    )
     ledger.add_argument("-p", "--persona", required=True)
 
     arguments = parser.parse_args(argv)
     settings = get_settings()
+    if arguments.scripted:
+        settings = settings.model_copy(update={"scripted": True})
 
     if arguments.command == "models":  # talks to the provider, builds no session
         return command_models(settings)
