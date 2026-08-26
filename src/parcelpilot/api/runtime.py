@@ -25,6 +25,7 @@ from parcelpilot.api.sessions import SessionStore
 from parcelpilot.auth.personas import Persona, find_persona, open_personas
 from parcelpilot.config import Settings, get_settings
 from parcelpilot.data.queries import OperationalData
+from parcelpilot.ingest.documents import Chunk
 from parcelpilot.retrieval.store import DocumentStore
 
 
@@ -37,6 +38,7 @@ class Runtime:
     agent: SupportAgent
     personas: list[Persona]
     sessions: SessionStore
+    chunks: list[Chunk]
     mode: str
     mode_description: str
 
@@ -69,18 +71,22 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
     settings = settings or get_settings()
     data = OperationalData.open(settings)
     client = build_model_client(settings)
+    store = DocumentStore.from_settings(settings)
 
     return Runtime(
         settings=settings,
         data=data,
         agent=SupportAgent(
-            registry=build_registry(DocumentStore.from_settings(settings), data),
+            registry=build_registry(store, data),
             client=client,
             snapshot_at=data.snapshot_at,
             max_steps=settings.max_agent_steps,
         ),
         personas=open_personas(settings),
         sessions=SessionStore(max_messages=settings.max_messages_per_session),
+        # Shared with the detectors, so the ops view and an answer read the
+        # same documents rather than two separately-built copies.
+        chunks=store.chunks,
         mode=mode_of(client),
         mode_description=describe_mode(settings),
     )

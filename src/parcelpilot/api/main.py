@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from parcelpilot.api.routes import actions, chat, session
+from parcelpilot.api.routes import actions, chat, insights, session
 from parcelpilot.api.runtime import build_runtime
 from parcelpilot.config import REPO_ROOT, Settings
 
@@ -68,6 +68,7 @@ def create_app(
     app.include_router(session.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(actions.router, prefix="/api")
+    app.include_router(insights.router, prefix="/api")
 
     @app.get("/api/health")
     def health(request: Request) -> dict[str, object]:
